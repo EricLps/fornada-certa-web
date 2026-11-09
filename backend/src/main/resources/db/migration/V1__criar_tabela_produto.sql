@@ -1,0 +1,6 @@
+CREATE TABLE produto (
+    id     UUID PRIMARY KEY,
+    nome   VARCHAR(100)  NOT NULL UNIQUE,
+    preco  NUMERIC(10,2) NOT NULL,
+    status  BOOLEAN       NOT NULL DEFAULT TRUE
+);

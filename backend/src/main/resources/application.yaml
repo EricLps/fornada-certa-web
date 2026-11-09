@@ -1,3 +1,13 @@
 spring:
   application:
     name: backend
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/fornada_certa
+    username: padaria123
+    password: ${DB_PASSWORD:padaria123}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+      show-sql: true
