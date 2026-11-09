@@ -16,6 +16,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -24,6 +25,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -249,5 +251,75 @@ class ProdutoControllerTest {
                 .andExpect(status().isBadRequest());
 
         verify(produtoService, never()).atualizarParcialmente(any(), any());
+    }
+
+    @Test
+    @DisplayName("GET /produto sem filtro devolve 200 e a lista completa")
+    void listarSemFiltro() throws Exception {
+        UUID id1 = UUID.randomUUID();
+        UUID id2 = UUID.randomUUID();
+        when(produtoService.listar(null)).thenReturn(List.of(
+                new ProdutoResponse(id1, "Pão francês", new BigDecimal("0.80"), true),
+                new ProdutoResponse(id2, "Sonho", new BigDecimal("6.50"), false)));
+
+        mockMvc.perform(get("/produto"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].id").value(id1.toString()))
+                .andExpect(jsonPath("$[0].nome").value("Pão francês"))
+                .andExpect(jsonPath("$[0].valor").value(0.8))
+                .andExpect(jsonPath("$[0].ativo").value(true))
+                .andExpect(jsonPath("$[1].id").value(id2.toString()))
+                .andExpect(jsonPath("$[1].ativo").value(false));
+
+        verify(produtoService).listar(null);
+    }
+
+    @Test
+    @DisplayName("GET /produto?status=true repassa true ao service")
+    void listarSoAtivos() throws Exception {
+        when(produtoService.listar(true)).thenReturn(List.of(
+                new ProdutoResponse(UUID.randomUUID(), "Pão francês", new BigDecimal("0.80"), true)));
+
+        mockMvc.perform(get("/produto").param("status", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].ativo").value(true));
+
+        verify(produtoService).listar(true);
+    }
+
+    @Test
+    @DisplayName("GET /produto?status=false repassa false ao service")
+    void listarSoInativos() throws Exception {
+        when(produtoService.listar(false)).thenReturn(List.of(
+                new ProdutoResponse(UUID.randomUUID(), "Sonho", new BigDecimal("6.50"), false)));
+
+        mockMvc.perform(get("/produto").param("status", "false"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].ativo").value(false));
+
+        verify(produtoService).listar(false);
+    }
+
+    @Test
+    @DisplayName("GET /produto sem produtos devolve 200 e lista vazia")
+    void listarVazio() throws Exception {
+        when(produtoService.listar(null)).thenReturn(List.of());
+
+        mockMvc.perform(get("/produto"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
+    @DisplayName("GET /produto?status=abc devolve 400 e não chama o service")
+    void listarStatusInvalido() throws Exception {
+        mockMvc.perform(get("/produto").param("status", "abc"))
+                .andExpect(status().isBadRequest());
+
+        verify(produtoService, never()).listar(any());
     }
 }

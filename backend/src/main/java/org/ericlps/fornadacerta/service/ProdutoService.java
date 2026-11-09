@@ -1,6 +1,5 @@
 package org.ericlps.fornadacerta.service;
 
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.ericlps.fornadacerta.dto.ProdutoPatchRequest;
 import org.ericlps.fornadacerta.dto.ProdutoRequest;
@@ -13,6 +12,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @RequiredArgsConstructor
@@ -52,6 +53,16 @@ public class ProdutoService {
         }
 
         return produtoMapper.toResponse(produto);
+
+    }
+
+    public List<ProdutoResponse> listar(Boolean status){
+
+        List<Produto> produtos = (status == null)
+                ? produtoRepository.findAll()
+                : produtoRepository.findByStatus(status);
+
+        return produtoMapper.toResponseList(produtos);
 
     }
 }

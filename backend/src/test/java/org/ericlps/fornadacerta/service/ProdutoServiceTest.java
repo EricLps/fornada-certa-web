@@ -17,6 +17,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -210,5 +211,72 @@ class ProdutoServiceTest {
                         .isEqualTo(HttpStatus.NOT_FOUND));
 
         verify(produtoRepository, never()).save(any());
+    }
+
+    private Produto produto(String nome, String preco, boolean status) {
+        Produto produto = new Produto();
+        produto.setId(UUID.randomUUID());
+        produto.setNome(nome);
+        produto.setPreco(new BigDecimal(preco));
+        produto.setStatus(status);
+        return produto;
+    }
+
+    @Test
+    @DisplayName("listar sem filtro devolve todos os produtos, ativos e inativos")
+    void listarSemFiltro() {
+        Produto ativo = produto("Pão francês", "0.80", true);
+        Produto inativo = produto("Sonho", "6.50", false);
+        when(produtoRepository.findAll()).thenReturn(List.of(ativo, inativo));
+
+        List<ProdutoResponse> response = produtoService.listar(null);
+
+        assertThat(response).hasSize(2);
+        assertThat(response.get(0).id()).isEqualTo(ativo.getId());
+        assertThat(response.get(0).nome()).isEqualTo("Pão francês");
+        assertThat(response.get(0).valor()).isEqualByComparingTo("0.80");
+        assertThat(response.get(0).ativo()).isTrue();
+        assertThat(response.get(1).id()).isEqualTo(inativo.getId());
+        assertThat(response.get(1).ativo()).isFalse();
+
+        verify(produtoRepository, never()).findByStatus(any());
+    }
+
+    @Test
+    @DisplayName("listar com status true busca só os ativos")
+    void listarSoAtivos() {
+        Produto ativo = produto("Pão francês", "0.80", true);
+        when(produtoRepository.findByStatus(true)).thenReturn(List.of(ativo));
+
+        List<ProdutoResponse> response = produtoService.listar(true);
+
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).nome()).isEqualTo("Pão francês");
+        assertThat(response.get(0).ativo()).isTrue();
+
+        verify(produtoRepository, never()).findAll();
+    }
+
+    @Test
+    @DisplayName("listar com status false busca só os inativos")
+    void listarSoInativos() {
+        Produto inativo = produto("Sonho", "6.50", false);
+        when(produtoRepository.findByStatus(false)).thenReturn(List.of(inativo));
+
+        List<ProdutoResponse> response = produtoService.listar(false);
+
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).nome()).isEqualTo("Sonho");
+        assertThat(response.get(0).ativo()).isFalse();
+
+        verify(produtoRepository, never()).findAll();
+    }
+
+    @Test
+    @DisplayName("listar sem resultados devolve lista vazia")
+    void listarVazio() {
+        when(produtoRepository.findByStatus(true)).thenReturn(List.of());
+
+        assertThat(produtoService.listar(true)).isEmpty();
     }
 }

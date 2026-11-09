@@ -11,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @Controller
@@ -34,6 +35,13 @@ public class ProdutoController {
                                                             @RequestBody @Valid ProdutoPatchRequest request){
 
         return ResponseEntity.ok(produtoService.atualizarParcialmente(id, request));
+
+    }
+
+    @GetMapping()
+    public ResponseEntity<List<ProdutoResponse>> listar(@RequestParam(required = false) Boolean status){
+
+        return ResponseEntity.ok(produtoService.listar(status));
 
     }
 
