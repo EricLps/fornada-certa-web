@@ -1,5 +1,6 @@
 package org.ericlps.fornadacerta.service;
 
+import org.ericlps.fornadacerta.dto.ProdutoPatchRequest;
 import org.ericlps.fornadacerta.dto.ProdutoRequest;
 import org.ericlps.fornadacerta.dto.ProdutoResponse;
 import org.ericlps.fornadacerta.entity.Produto;
@@ -78,58 +79,132 @@ class ProdutoServiceTest {
         assertThat(salvo.getStatus()).isTrue();
     }
 
-    @Test
-    @DisplayName("atualizarProduto altera o produto existente, mantendo id e status")
-    void atualizarProduto() {
-        UUID id = UUID.randomUUID();
+    private Produto produtoExistente(UUID id) {
         Produto existente = new Produto();
         existente.setId(id);
         existente.setNome("Pão francês");
         existente.setPreco(new BigDecimal("0.80"));
-        existente.setStatus(false);
+        existente.setStatus(true);
+        return existente;
+    }
+
+    @Test
+    @DisplayName("atualizarParcialmente altera só o nome e mantém preço e status")
+    void atualizarParcialmenteSoNome() {
+        UUID id = UUID.randomUUID();
+        Produto existente = produtoExistente(id);
         when(produtoRepository.findById(id)).thenReturn(Optional.of(existente));
 
-        ProdutoResponse response = produtoService.atualizarProduto(
-                id, new ProdutoRequest("Pão francês integral", new BigDecimal("1.20")));
+        ProdutoResponse response = produtoService.atualizarParcialmente(
+                id, new ProdutoPatchRequest("Pão de sal", null, null));
 
-        // o objeto que veio do banco foi alterado (é isso que vira UPDATE)
+        assertThat(existente.getNome()).isEqualTo("Pão de sal");
+        assertThat(existente.getPreco()).isEqualByComparingTo("0.80");
+        assertThat(existente.getStatus()).isTrue();
+
+        assertThat(response.id()).isEqualTo(id);
+        assertThat(response.nome()).isEqualTo("Pão de sal");
+        assertThat(response.valor()).isEqualByComparingTo("0.80");
+        assertThat(response.ativo()).isTrue();
+    }
+
+    @Test
+    @DisplayName("atualizarParcialmente altera só o preço e mantém nome e status")
+    void atualizarParcialmenteSoPreco() {
+        UUID id = UUID.randomUUID();
+        Produto existente = produtoExistente(id);
+        when(produtoRepository.findById(id)).thenReturn(Optional.of(existente));
+
+        ProdutoResponse response = produtoService.atualizarParcialmente(
+                id, new ProdutoPatchRequest(null, new BigDecimal("1.50"), null));
+
+        assertThat(existente.getNome()).isEqualTo("Pão francês");
+        assertThat(existente.getPreco()).isEqualByComparingTo("1.50");
+        assertThat(existente.getStatus()).isTrue();
+
+        assertThat(response.nome()).isEqualTo("Pão francês");
+        assertThat(response.valor()).isEqualByComparingTo("1.50");
+        assertThat(response.ativo()).isTrue();
+    }
+
+    @Test
+    @DisplayName("atualizarParcialmente altera só o status e mantém nome e preço")
+    void atualizarParcialmenteSoStatus() {
+        UUID id = UUID.randomUUID();
+        Produto existente = produtoExistente(id);
+        when(produtoRepository.findById(id)).thenReturn(Optional.of(existente));
+
+        ProdutoResponse response = produtoService.atualizarParcialmente(
+                id, new ProdutoPatchRequest(null, null, false));
+
+        assertThat(existente.getNome()).isEqualTo("Pão francês");
+        assertThat(existente.getPreco()).isEqualByComparingTo("0.80");
+        assertThat(existente.getStatus()).isFalse();
+
+        assertThat(response.ativo()).isFalse();
+    }
+
+    @Test
+    @DisplayName("atualizarParcialmente altera todos os campos enviados")
+    void atualizarParcialmenteTodosOsCampos() {
+        UUID id = UUID.randomUUID();
+        Produto existente = produtoExistente(id);
+        when(produtoRepository.findById(id)).thenReturn(Optional.of(existente));
+
+        ProdutoResponse response = produtoService.atualizarParcialmente(
+                id, new ProdutoPatchRequest("Pão integral", new BigDecimal("1.20"), false));
+
         assertThat(existente.getId()).isEqualTo(id);
-        assertThat(existente.getNome()).isEqualTo("Pão francês integral");
+        assertThat(existente.getNome()).isEqualTo("Pão integral");
         assertThat(existente.getPreco()).isEqualByComparingTo("1.20");
         assertThat(existente.getStatus()).isFalse();
 
         assertThat(response.id()).isEqualTo(id);
-        assertThat(response.nome()).isEqualTo("Pão francês integral");
+        assertThat(response.nome()).isEqualTo("Pão integral");
         assertThat(response.valor()).isEqualByComparingTo("1.20");
         assertThat(response.ativo()).isFalse();
     }
 
     @Test
-    @DisplayName("atualizarProduto não cria produto novo (não salva entity sem id)")
-    void atualizarProdutoNaoCriaNovo() {
+    @DisplayName("atualizarParcialmente com corpo vazio não altera nada")
+    void atualizarParcialmenteSemCampos() {
         UUID id = UUID.randomUUID();
-        Produto existente = new Produto();
-        existente.setId(id);
-        existente.setNome("Sonho");
-        existente.setPreco(new BigDecimal("6.50"));
+        Produto existente = produtoExistente(id);
         when(produtoRepository.findById(id)).thenReturn(Optional.of(existente));
 
-        produtoService.atualizarProduto(id, new ProdutoRequest("Sonho de creme", new BigDecimal("7.00")));
+        ProdutoResponse response = produtoService.atualizarParcialmente(
+                id, new ProdutoPatchRequest(null, null, null));
 
-        // se alguém voltar a usar toEntity aqui, o save com um Produto novo faria um INSERT
+        assertThat(existente.getNome()).isEqualTo("Pão francês");
+        assertThat(existente.getPreco()).isEqualByComparingTo("0.80");
+        assertThat(existente.getStatus()).isTrue();
+
+        assertThat(response.nome()).isEqualTo("Pão francês");
+        assertThat(response.valor()).isEqualByComparingTo("0.80");
+        assertThat(response.ativo()).isTrue();
+    }
+
+    @Test
+    @DisplayName("atualizarParcialmente não cria produto novo (não salva entity sem id)")
+    void atualizarParcialmenteNaoCriaNovo() {
+        UUID id = UUID.randomUUID();
+        when(produtoRepository.findById(id)).thenReturn(Optional.of(produtoExistente(id)));
+
+        produtoService.atualizarParcialmente(id, new ProdutoPatchRequest("Sonho", null, null));
+
         ArgumentCaptor<Produto> captor = ArgumentCaptor.forClass(Produto.class);
         verify(produtoRepository, atMost(1)).save(captor.capture());
         captor.getAllValues().forEach(salvo -> assertThat(salvo.getId()).isEqualTo(id));
     }
 
     @Test
-    @DisplayName("atualizarProduto com id inexistente lança 404 e não salva nada")
-    void atualizarProdutoInexistente() {
+    @DisplayName("atualizarParcialmente com id inexistente lança 404 e não salva nada")
+    void atualizarParcialmenteInexistente() {
         UUID id = UUID.randomUUID();
         when(produtoRepository.findById(id)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> produtoService.atualizarProduto(
-                id, new ProdutoRequest("Qualquer", new BigDecimal("1.00"))))
+        assertThatThrownBy(() -> produtoService.atualizarParcialmente(
+                id, new ProdutoPatchRequest("Qualquer", null, null)))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode())
                         .isEqualTo(HttpStatus.NOT_FOUND));

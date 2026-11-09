@@ -2,6 +2,7 @@ package org.ericlps.fornadacerta.controller;
 
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
+import org.ericlps.fornadacerta.dto.ProdutoPatchRequest;
 import org.ericlps.fornadacerta.dto.ProdutoRequest;
 import org.ericlps.fornadacerta.dto.ProdutoResponse;
 import org.ericlps.fornadacerta.service.ProdutoService;
@@ -28,11 +29,11 @@ public class ProdutoController {
 
     }
 
-    @PutMapping("/{id}")
-    public ResponseEntity<ProdutoResponse> atualizarProduto(@PathVariable UUID id,
-                                                            @RequestBody @Valid ProdutoRequest request){
+    @PatchMapping("/{id}")
+    public ResponseEntity<ProdutoResponse> atualizarParcialmente(@PathVariable UUID id,
+                                                            @RequestBody @Valid ProdutoPatchRequest request){
 
-        return ResponseEntity.ok(produtoService.atualizarProduto(id,request));
+        return ResponseEntity.ok(produtoService.atualizarParcialmente(id, request));
 
     }
 

@@ -1,10 +1,12 @@
 package org.ericlps.fornadacerta.controller;
 
+import org.ericlps.fornadacerta.dto.ProdutoPatchRequest;
 import org.ericlps.fornadacerta.dto.ProdutoRequest;
 import org.ericlps.fornadacerta.dto.ProdutoResponse;
 import org.ericlps.fornadacerta.service.ProdutoService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.HttpStatus;
@@ -16,11 +18,13 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -110,62 +114,140 @@ class ProdutoControllerTest {
     }
 
     @Test
-    @DisplayName("PUT /produto/{id} com dados válidos devolve 200 e o produto atualizado")
-    void atualizarValido() throws Exception {
+    @DisplayName("PATCH /produto/{id} com só um campo devolve 200 e o produto atualizado")
+    void atualizarParcialmenteValido() throws Exception {
         UUID id = UUID.randomUUID();
-        when(produtoService.atualizarProduto(eq(id), any(ProdutoRequest.class)))
-                .thenReturn(new ProdutoResponse(id, "Pão integral", new BigDecimal("1.20"), true));
+        when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
+                .thenReturn(new ProdutoResponse(id, "Pão francês", new BigDecimal("1.50"), true));
 
-        mockMvc.perform(put("/produto/{id}", id)
+        mockMvc.perform(patch("/produto/{id}", id)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                { "nome": "Pão integral", "preco": 1.20 }
+                                { "preco": 1.50 }
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(id.toString()))
-                .andExpect(jsonPath("$.nome").value("Pão integral"))
-                .andExpect(jsonPath("$.valor").value(1.2))
+                .andExpect(jsonPath("$.nome").value("Pão francês"))
+                .andExpect(jsonPath("$.valor").value(1.5))
                 .andExpect(jsonPath("$.ativo").value(true));
     }
 
     @Test
-    @DisplayName("PUT /produto/{id} de produto inexistente devolve 404")
-    void atualizarInexistente() throws Exception {
+    @DisplayName("PATCH /produto/{id} repassa ao service só os campos enviados")
+    void atualizarParcialmenteRepassaCampos() throws Exception {
         UUID id = UUID.randomUUID();
-        when(produtoService.atualizarProduto(eq(id), any(ProdutoRequest.class)))
-                .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Produto não encontrado"));
+        when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
+                .thenReturn(new ProdutoResponse(id, "Pão francês", new BigDecimal("0.80"), false));
 
-        mockMvc.perform(put("/produto/{id}", id)
+        mockMvc.perform(patch("/produto/{id}", id)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                { "nome": "Pão integral", "preco": 1.20 }
+                                { "status": false }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ativo").value(false));
+
+        ArgumentCaptor<ProdutoPatchRequest> captor = ArgumentCaptor.forClass(ProdutoPatchRequest.class);
+        verify(produtoService).atualizarParcialmente(eq(id), captor.capture());
+        assertThat(captor.getValue().nome()).isNull();
+        assertThat(captor.getValue().preco()).isNull();
+        assertThat(captor.getValue().status()).isFalse();
+    }
+
+    @Test
+    @DisplayName("PATCH /produto/{id} com corpo vazio ({}) devolve 200")
+    void atualizarParcialmenteCorpoVazio() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
+                .thenReturn(new ProdutoResponse(id, "Pão francês", new BigDecimal("0.80"), true));
+
+        mockMvc.perform(patch("/produto/{id}", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("PATCH /produto/{id} de produto inexistente devolve 404")
+    void atualizarParcialmenteInexistente() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
+                .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Produto não encontrado"));
+
+        mockMvc.perform(patch("/produto/{id}", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "nome": "Pão integral" }
                                 """))
                 .andExpect(status().isNotFound());
     }
 
     @Test
-    @DisplayName("PUT /produto/{id} com dados inválidos devolve 400 e não chama o service")
-    void atualizarInvalido() throws Exception {
-        mockMvc.perform(put("/produto/{id}", UUID.randomUUID())
+    @DisplayName("PATCH /produto/{id} com nome vazio devolve 400 e não chama o service")
+    void atualizarParcialmenteNomeVazio() throws Exception {
+        mockMvc.perform(patch("/produto/{id}", UUID.randomUUID())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                { "nome": "", "preco": -5 }
+                                { "nome": "" }
                                 """))
                 .andExpect(status().isBadRequest());
 
-        verify(produtoService, never()).atualizarProduto(any(), any());
+        verify(produtoService, never()).atualizarParcialmente(any(), any());
     }
 
     @Test
-    @DisplayName("PUT /produto/{id} com id que não é UUID devolve 400")
-    void atualizarIdInvalido() throws Exception {
-        mockMvc.perform(put("/produto/abc")
+    @DisplayName("PATCH /produto/{id} com preço negativo ou zero devolve 400 e não chama o service")
+    void atualizarParcialmentePrecoInvalido() throws Exception {
+        mockMvc.perform(patch("/produto/{id}", UUID.randomUUID())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                { "nome": "Pão integral", "preco": 1.20 }
+                                { "preco": -1 }
                                 """))
                 .andExpect(status().isBadRequest());
 
-        verify(produtoService, never()).atualizarProduto(any(), any());
+        mockMvc.perform(patch("/produto/{id}", UUID.randomUUID())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "preco": 0 }
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verify(produtoService, never()).atualizarParcialmente(any(), any());
+    }
+
+    @Test
+    @DisplayName("PATCH /produto/{id} com nome acima de 100 caracteres devolve 400")
+    void atualizarParcialmenteNomeLongo() throws Exception {
+        String nomeLongo = "a".repeat(101);
+
+        mockMvc.perform(patch("/produto/{id}", UUID.randomUUID())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ \"nome\": \"" + nomeLongo + "\" }"))
+                .andExpect(status().isBadRequest());
+
+        verify(produtoService, never()).atualizarParcialmente(any(), any());
+    }
+
+    @Test
+    @DisplayName("PATCH /produto/{id} com id que não é UUID devolve 400")
+    void atualizarParcialmenteIdInvalido() throws Exception {
+        mockMvc.perform(patch("/produto/abc")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "nome": "Pão integral" }
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verify(produtoService, never()).atualizarParcialmente(any(), any());
+    }
+
+    @Test
+    @DisplayName("PATCH /produto/{id} sem corpo devolve 400")
+    void atualizarParcialmenteSemCorpo() throws Exception {
+        mockMvc.perform(patch("/produto/{id}", UUID.randomUUID())
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
+
+        verify(produtoService, never()).atualizarParcialmente(any(), any());
     }
 }
