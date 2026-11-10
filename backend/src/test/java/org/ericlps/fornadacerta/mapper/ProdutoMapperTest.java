@@ -16,79 +16,74 @@ class ProdutoMapperTest {
 
     private final ProdutoMapper mapper = new ProdutoMapper();
 
+    private Produto produto(UUID id, String nome, String preco, boolean status) {
+        Produto produto = new Produto();
+        produto.setId(id);
+        produto.setNome(nome);
+        produto.setPreco(new BigDecimal(preco));
+        produto.setStatus(status);
+        return produto;
+    }
+
+    // ---------- toEntity ----------
+
     @Test
-    @DisplayName("toEntity copia nome e preço e cria o produto como ativo, sem id")
-    void toEntity() {
-        ProdutoRequest request = new ProdutoRequest("Pão francês", new BigDecimal("0.80"));
+    @DisplayName("toEntity copia nome e preço do request")
+    void toEntityCopiaCampos() {
+        Produto produto = mapper.toEntity(new ProdutoRequest("Pão francês", new BigDecimal("0.80")));
 
-        Produto produto = mapper.toEntity(request);
-
-        assertThat(produto.getId()).isNull();
         assertThat(produto.getNome()).isEqualTo("Pão francês");
         assertThat(produto.getPreco()).isEqualByComparingTo("0.80");
+    }
+
+    @Test
+    @DisplayName("toEntity cria produto novo: sem id e ativo")
+    void toEntityProdutoNovo() {
+        Produto produto = mapper.toEntity(new ProdutoRequest("Sonho", new BigDecimal("6.50")));
+
+        assertThat(produto.getId()).isNull();
         assertThat(produto.getStatus()).isTrue();
     }
 
-    @Test
-    @DisplayName("toResponse copia todos os campos da entity")
-    void toResponse() {
-        UUID id = UUID.randomUUID();
-        Produto produto = new Produto();
-        produto.setId(id);
-        produto.setNome("Sonho");
-        produto.setPreco(new BigDecimal("6.50"));
-        produto.setStatus(false);
+    // ---------- toResponse ----------
 
-        ProdutoResponse response = mapper.toResponse(produto);
+    @Test
+    @DisplayName("toResponse copia todos os campos de um produto ativo")
+    void toResponseAtivo() {
+        UUID id = UUID.randomUUID();
+
+        ProdutoResponse response = mapper.toResponse(produto(id, "Baguete", "9.90", true));
 
         assertThat(response.id()).isEqualTo(id);
-        assertThat(response.nome()).isEqualTo("Sonho");
-        assertThat(response.valor()).isEqualByComparingTo("6.50");
+        assertThat(response.nome()).isEqualTo("Baguete");
+        assertThat(response.valor()).isEqualByComparingTo("9.90");
+        assertThat(response.ativo()).isTrue();
+    }
+
+    @Test
+    @DisplayName("toResponse mantém o status de um produto inativo")
+    void toResponseInativo() {
+        ProdutoResponse response = mapper.toResponse(produto(UUID.randomUUID(), "Sonho", "6.50", false));
+
         assertThat(response.ativo()).isFalse();
     }
 
-    @Test
-    @DisplayName("atualizar altera nome e preço, mas mantém id e status")
-    void atualizar() {
-        UUID id = UUID.randomUUID();
-        Produto produto = new Produto();
-        produto.setId(id);
-        produto.setNome("Pão de queijo");
-        produto.setPreco(new BigDecimal("3.00"));
-        produto.setStatus(false);
-
-        mapper.atualizar(produto, new ProdutoRequest("Pão de queijo grande", new BigDecimal("4.50")));
-
-        assertThat(produto.getId()).isEqualTo(id);
-        assertThat(produto.getNome()).isEqualTo("Pão de queijo grande");
-        assertThat(produto.getPreco()).isEqualByComparingTo("4.50");
-        assertThat(produto.getStatus()).isFalse();
-    }
+    // ---------- toResponseList ----------
 
     @Test
-    @DisplayName("toResponseList converte todos os produtos, na mesma ordem")
-    void toResponseList() {
-        Produto primeiro = new Produto();
-        primeiro.setId(UUID.randomUUID());
-        primeiro.setNome("Pão francês");
-        primeiro.setPreco(new BigDecimal("0.80"));
-        primeiro.setStatus(true);
-        Produto segundo = new Produto();
-        segundo.setId(UUID.randomUUID());
-        segundo.setNome("Sonho");
-        segundo.setPreco(new BigDecimal("6.50"));
-        segundo.setStatus(false);
+    @DisplayName("toResponseList converte todos os itens mantendo a ordem")
+    void toResponseListMantemOrdem() {
+        List<Produto> produtos = List.of(
+                produto(UUID.randomUUID(), "Baguete", "9.90", true),
+                produto(UUID.randomUUID(), "Croissant", "7.00", false),
+                produto(UUID.randomUUID(), "Sonho", "6.50", true));
 
-        List<ProdutoResponse> responses = mapper.toResponseList(List.of(primeiro, segundo));
+        List<ProdutoResponse> responses = mapper.toResponseList(produtos);
 
-        assertThat(responses).hasSize(2);
-        assertThat(responses.get(0).id()).isEqualTo(primeiro.getId());
-        assertThat(responses.get(0).nome()).isEqualTo("Pão francês");
-        assertThat(responses.get(0).valor()).isEqualByComparingTo("0.80");
-        assertThat(responses.get(0).ativo()).isTrue();
-        assertThat(responses.get(1).id()).isEqualTo(segundo.getId());
-        assertThat(responses.get(1).nome()).isEqualTo("Sonho");
-        assertThat(responses.get(1).ativo()).isFalse();
+        assertThat(responses).extracting(ProdutoResponse::nome)
+                .containsExactly("Baguete", "Croissant", "Sonho");
+        assertThat(responses).extracting(ProdutoResponse::ativo)
+                .containsExactly(true, false, true);
     }
 
     @Test

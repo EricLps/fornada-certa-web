@@ -8,11 +8,13 @@ import org.ericlps.fornadacerta.mapper.ProdutoMapper;
 import org.ericlps.fornadacerta.repository.ProdutoRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -24,6 +26,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.atMost;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -32,6 +36,9 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class ProdutoServiceTest {
 
+    private static final Sort NOME_ASC = Sort.by(Sort.Direction.ASC, "nome");
+    private static final Sort NOME_DESC = Sort.by(Sort.Direction.DESC, "nome");
+
     @Mock
     private ProdutoRepository produtoRepository;
 
@@ -39,244 +46,315 @@ class ProdutoServiceTest {
 
     @BeforeEach
     void setUp() {
-        // Repository é falso (mock): o teste não precisa de banco.
-        // Mapper é o real: assim o teste também cobre a conversão.
+        // Repository é mock (sem banco); mapper é o real, para cobrir a conversão também.
         produtoService = new ProdutoService(produtoRepository, new ProdutoMapper());
     }
 
-    @Test
-    @DisplayName("cadastrarProduto salva o produto e devolve o response com o id gerado")
-    void cadastrarProduto() {
-        UUID idGerado = UUID.randomUUID();
-        when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> {
-            Produto produto = invocacao.getArgument(0);
-            produto.setId(idGerado); // simula o banco gerando o id
-            return produto;
-        });
-
-        ProdutoResponse response = produtoService.cadastrarProduto(
-                new ProdutoRequest("Baguete", new BigDecimal("9.90")));
-
-        assertThat(response.id()).isEqualTo(idGerado);
-        assertThat(response.nome()).isEqualTo("Baguete");
-        assertThat(response.valor()).isEqualByComparingTo("9.90");
-        assertThat(response.ativo()).isTrue();
-    }
-
-    @Test
-    @DisplayName("cadastrarProduto envia ao repository uma entity nova, ativa e com os dados do request")
-    void cadastrarProdutoEnviaEntityCorreta() {
-        when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
-
-        produtoService.cadastrarProduto(new ProdutoRequest("Croissant", new BigDecimal("7.00")));
-
-        ArgumentCaptor<Produto> captor = ArgumentCaptor.forClass(Produto.class);
-        verify(produtoRepository).save(captor.capture());
-        Produto salvo = captor.getValue();
-
-        assertThat(salvo.getId()).isNull();
-        assertThat(salvo.getNome()).isEqualTo("Croissant");
-        assertThat(salvo.getPreco()).isEqualByComparingTo("7.00");
-        assertThat(salvo.getStatus()).isTrue();
-    }
-
-    private Produto produtoExistente(UUID id) {
-        Produto existente = new Produto();
-        existente.setId(id);
-        existente.setNome("Pão francês");
-        existente.setPreco(new BigDecimal("0.80"));
-        existente.setStatus(true);
-        return existente;
-    }
-
-    @Test
-    @DisplayName("atualizarParcialmente altera só o nome e mantém preço e status")
-    void atualizarParcialmenteSoNome() {
-        UUID id = UUID.randomUUID();
-        Produto existente = produtoExistente(id);
-        when(produtoRepository.findById(id)).thenReturn(Optional.of(existente));
-
-        ProdutoResponse response = produtoService.atualizarParcialmente(
-                id, new ProdutoPatchRequest("Pão de sal", null, null));
-
-        assertThat(existente.getNome()).isEqualTo("Pão de sal");
-        assertThat(existente.getPreco()).isEqualByComparingTo("0.80");
-        assertThat(existente.getStatus()).isTrue();
-
-        assertThat(response.id()).isEqualTo(id);
-        assertThat(response.nome()).isEqualTo("Pão de sal");
-        assertThat(response.valor()).isEqualByComparingTo("0.80");
-        assertThat(response.ativo()).isTrue();
-    }
-
-    @Test
-    @DisplayName("atualizarParcialmente altera só o preço e mantém nome e status")
-    void atualizarParcialmenteSoPreco() {
-        UUID id = UUID.randomUUID();
-        Produto existente = produtoExistente(id);
-        when(produtoRepository.findById(id)).thenReturn(Optional.of(existente));
-
-        ProdutoResponse response = produtoService.atualizarParcialmente(
-                id, new ProdutoPatchRequest(null, new BigDecimal("1.50"), null));
-
-        assertThat(existente.getNome()).isEqualTo("Pão francês");
-        assertThat(existente.getPreco()).isEqualByComparingTo("1.50");
-        assertThat(existente.getStatus()).isTrue();
-
-        assertThat(response.nome()).isEqualTo("Pão francês");
-        assertThat(response.valor()).isEqualByComparingTo("1.50");
-        assertThat(response.ativo()).isTrue();
-    }
-
-    @Test
-    @DisplayName("atualizarParcialmente altera só o status e mantém nome e preço")
-    void atualizarParcialmenteSoStatus() {
-        UUID id = UUID.randomUUID();
-        Produto existente = produtoExistente(id);
-        when(produtoRepository.findById(id)).thenReturn(Optional.of(existente));
-
-        ProdutoResponse response = produtoService.atualizarParcialmente(
-                id, new ProdutoPatchRequest(null, null, false));
-
-        assertThat(existente.getNome()).isEqualTo("Pão francês");
-        assertThat(existente.getPreco()).isEqualByComparingTo("0.80");
-        assertThat(existente.getStatus()).isFalse();
-
-        assertThat(response.ativo()).isFalse();
-    }
-
-    @Test
-    @DisplayName("atualizarParcialmente altera todos os campos enviados")
-    void atualizarParcialmenteTodosOsCampos() {
-        UUID id = UUID.randomUUID();
-        Produto existente = produtoExistente(id);
-        when(produtoRepository.findById(id)).thenReturn(Optional.of(existente));
-
-        ProdutoResponse response = produtoService.atualizarParcialmente(
-                id, new ProdutoPatchRequest("Pão integral", new BigDecimal("1.20"), false));
-
-        assertThat(existente.getId()).isEqualTo(id);
-        assertThat(existente.getNome()).isEqualTo("Pão integral");
-        assertThat(existente.getPreco()).isEqualByComparingTo("1.20");
-        assertThat(existente.getStatus()).isFalse();
-
-        assertThat(response.id()).isEqualTo(id);
-        assertThat(response.nome()).isEqualTo("Pão integral");
-        assertThat(response.valor()).isEqualByComparingTo("1.20");
-        assertThat(response.ativo()).isFalse();
-    }
-
-    @Test
-    @DisplayName("atualizarParcialmente com corpo vazio não altera nada")
-    void atualizarParcialmenteSemCampos() {
-        UUID id = UUID.randomUUID();
-        Produto existente = produtoExistente(id);
-        when(produtoRepository.findById(id)).thenReturn(Optional.of(existente));
-
-        ProdutoResponse response = produtoService.atualizarParcialmente(
-                id, new ProdutoPatchRequest(null, null, null));
-
-        assertThat(existente.getNome()).isEqualTo("Pão francês");
-        assertThat(existente.getPreco()).isEqualByComparingTo("0.80");
-        assertThat(existente.getStatus()).isTrue();
-
-        assertThat(response.nome()).isEqualTo("Pão francês");
-        assertThat(response.valor()).isEqualByComparingTo("0.80");
-        assertThat(response.ativo()).isTrue();
-    }
-
-    @Test
-    @DisplayName("atualizarParcialmente não cria produto novo (não salva entity sem id)")
-    void atualizarParcialmenteNaoCriaNovo() {
-        UUID id = UUID.randomUUID();
-        when(produtoRepository.findById(id)).thenReturn(Optional.of(produtoExistente(id)));
-
-        produtoService.atualizarParcialmente(id, new ProdutoPatchRequest("Sonho", null, null));
-
-        ArgumentCaptor<Produto> captor = ArgumentCaptor.forClass(Produto.class);
-        verify(produtoRepository, atMost(1)).save(captor.capture());
-        captor.getAllValues().forEach(salvo -> assertThat(salvo.getId()).isEqualTo(id));
-    }
-
-    @Test
-    @DisplayName("atualizarParcialmente com id inexistente lança 404 e não salva nada")
-    void atualizarParcialmenteInexistente() {
-        UUID id = UUID.randomUUID();
-        when(produtoRepository.findById(id)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> produtoService.atualizarParcialmente(
-                id, new ProdutoPatchRequest("Qualquer", null, null)))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode())
-                        .isEqualTo(HttpStatus.NOT_FOUND));
-
-        verify(produtoRepository, never()).save(any());
-    }
-
-    private Produto produto(String nome, String preco, boolean status) {
+    private Produto produto(UUID id, String nome, String preco, boolean status) {
         Produto produto = new Produto();
-        produto.setId(UUID.randomUUID());
+        produto.setId(id);
         produto.setNome(nome);
         produto.setPreco(new BigDecimal(preco));
         produto.setStatus(status);
         return produto;
     }
 
-    @Test
-    @DisplayName("listar sem filtro devolve todos os produtos, ativos e inativos")
-    void listarSemFiltro() {
-        Produto ativo = produto("Pão francês", "0.80", true);
-        Produto inativo = produto("Sonho", "6.50", false);
-        when(produtoRepository.findAll()).thenReturn(List.of(ativo, inativo));
+    // =====================================================================
+    @Nested
+    @DisplayName("cadastrarProduto")
+    class Cadastrar {
 
-        List<ProdutoResponse> response = produtoService.listar(null);
+        @Test
+        @DisplayName("com nome novo: salva e devolve o response com o id gerado")
+        void sucesso() {
+            UUID idGerado = UUID.randomUUID();
+            when(produtoRepository.existsByNomeIgnoreCase("Baguete")).thenReturn(false);
+            when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> {
+                Produto produto = invocacao.getArgument(0);
+                produto.setId(idGerado); // simula o banco gerando o id
+                return produto;
+            });
 
-        assertThat(response).hasSize(2);
-        assertThat(response.get(0).id()).isEqualTo(ativo.getId());
-        assertThat(response.get(0).nome()).isEqualTo("Pão francês");
-        assertThat(response.get(0).valor()).isEqualByComparingTo("0.80");
-        assertThat(response.get(0).ativo()).isTrue();
-        assertThat(response.get(1).id()).isEqualTo(inativo.getId());
-        assertThat(response.get(1).ativo()).isFalse();
+            ProdutoResponse response = produtoService.cadastrarProduto(
+                    new ProdutoRequest("Baguete", new BigDecimal("9.90")));
 
-        verify(produtoRepository, never()).findByStatus(any());
+            assertThat(response.id()).isEqualTo(idGerado);
+            assertThat(response.nome()).isEqualTo("Baguete");
+            assertThat(response.valor()).isEqualByComparingTo("9.90");
+            assertThat(response.ativo()).isTrue();
+        }
+
+        @Test
+        @DisplayName("envia ao repository uma entity nova, ativa e com os dados do request")
+        void enviaEntityCorreta() {
+            when(produtoRepository.existsByNomeIgnoreCase("Croissant")).thenReturn(false);
+            when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+
+            produtoService.cadastrarProduto(new ProdutoRequest("Croissant", new BigDecimal("7.00")));
+
+            ArgumentCaptor<Produto> captor = ArgumentCaptor.forClass(Produto.class);
+            verify(produtoRepository).save(captor.capture());
+            Produto salvo = captor.getValue();
+
+            assertThat(salvo.getId()).isNull();
+            assertThat(salvo.getNome()).isEqualTo("Croissant");
+            assertThat(salvo.getPreco()).isEqualByComparingTo("7.00");
+            assertThat(salvo.getStatus()).isTrue();
+        }
+
+        @Test
+        @DisplayName("com nome já existente: lança exceção e não salva nada")
+        void nomeDuplicado() {
+            when(produtoRepository.existsByNomeIgnoreCase("Pão francês")).thenReturn(true);
+
+            assertThatThrownBy(() -> produtoService.cadastrarProduto(
+                    new ProdutoRequest("Pão francês", new BigDecimal("0.80"))))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("Pão francês");
+
+            verify(produtoRepository, never()).save(any());
+        }
     }
 
-    @Test
-    @DisplayName("listar com status true busca só os ativos")
-    void listarSoAtivos() {
-        Produto ativo = produto("Pão francês", "0.80", true);
-        when(produtoRepository.findByStatus(true)).thenReturn(List.of(ativo));
+    // =====================================================================
+    @Nested
+    @DisplayName("atualizarParcialmente")
+    class AtualizarParcialmente {
 
-        List<ProdutoResponse> response = produtoService.listar(true);
+        private UUID id;
+        private Produto existente;
 
-        assertThat(response).hasSize(1);
-        assertThat(response.get(0).nome()).isEqualTo("Pão francês");
-        assertThat(response.get(0).ativo()).isTrue();
+        @BeforeEach
+        void setUp() {
+            id = UUID.randomUUID();
+            existente = produto(id, "Pão francês", "0.80", true);
+        }
 
-        verify(produtoRepository, never()).findAll();
+        @Test
+        @DisplayName("só nome: altera o nome e mantém preço e status")
+        void soNome() {
+            when(produtoRepository.findById(id)).thenReturn(Optional.of(existente));
+            when(produtoRepository.existsByNomeIgnoreCaseAndIdNot("Pão de sal", id)).thenReturn(false);
+
+            ProdutoResponse response = produtoService.atualizarParcialmente(
+                    id, new ProdutoPatchRequest("Pão de sal", null, null));
+
+            assertThat(existente.getNome()).isEqualTo("Pão de sal");
+            assertThat(existente.getPreco()).isEqualByComparingTo("0.80");
+            assertThat(existente.getStatus()).isTrue();
+            assertThat(response.nome()).isEqualTo("Pão de sal");
+        }
+
+        @Test
+        @DisplayName("só preço: altera o preço, mantém o resto e não checa nome")
+        void soPreco() {
+            when(produtoRepository.findById(id)).thenReturn(Optional.of(existente));
+
+            ProdutoResponse response = produtoService.atualizarParcialmente(
+                    id, new ProdutoPatchRequest(null, new BigDecimal("1.50"), null));
+
+            assertThat(existente.getNome()).isEqualTo("Pão francês");
+            assertThat(existente.getPreco()).isEqualByComparingTo("1.50");
+            assertThat(existente.getStatus()).isTrue();
+            assertThat(response.valor()).isEqualByComparingTo("1.50");
+            verify(produtoRepository, never()).existsByNomeIgnoreCaseAndIdNot(anyString(), any());
+        }
+
+        @Test
+        @DisplayName("só status: desativa sem mexer no preço (botão da listagem)")
+        void soStatus() {
+            when(produtoRepository.findById(id)).thenReturn(Optional.of(existente));
+
+            ProdutoResponse response = produtoService.atualizarParcialmente(
+                    id, new ProdutoPatchRequest(null, null, false));
+
+            assertThat(existente.getStatus()).isFalse();
+            assertThat(existente.getPreco()).isEqualByComparingTo("0.80");
+            assertThat(existente.getNome()).isEqualTo("Pão francês");
+            assertThat(response.ativo()).isFalse();
+        }
+
+        @Test
+        @DisplayName("só status: reativa um produto inativo")
+        void reativar() {
+            existente.setStatus(false);
+            when(produtoRepository.findById(id)).thenReturn(Optional.of(existente));
+
+            ProdutoResponse response = produtoService.atualizarParcialmente(
+                    id, new ProdutoPatchRequest(null, null, true));
+
+            assertThat(existente.getStatus()).isTrue();
+            assertThat(response.ativo()).isTrue();
+        }
+
+        @Test
+        @DisplayName("todos os campos juntos: altera os três")
+        void todosOsCampos() {
+            when(produtoRepository.findById(id)).thenReturn(Optional.of(existente));
+            when(produtoRepository.existsByNomeIgnoreCaseAndIdNot("Pão integral", id)).thenReturn(false);
+
+            ProdutoResponse response = produtoService.atualizarParcialmente(
+                    id, new ProdutoPatchRequest("Pão integral", new BigDecimal("1.20"), false));
+
+            assertThat(response.id()).isEqualTo(id);
+            assertThat(response.nome()).isEqualTo("Pão integral");
+            assertThat(response.valor()).isEqualByComparingTo("1.20");
+            assertThat(response.ativo()).isFalse();
+        }
+
+        @Test
+        @DisplayName("corpo vazio (tudo nulo): não altera nada")
+        void nadaParaAlterar() {
+            when(produtoRepository.findById(id)).thenReturn(Optional.of(existente));
+
+            ProdutoResponse response = produtoService.atualizarParcialmente(
+                    id, new ProdutoPatchRequest(null, null, null));
+
+            assertThat(existente.getNome()).isEqualTo("Pão francês");
+            assertThat(existente.getPreco()).isEqualByComparingTo("0.80");
+            assertThat(existente.getStatus()).isTrue();
+            assertThat(response.id()).isEqualTo(id);
+            verify(produtoRepository, never()).existsByNomeIgnoreCaseAndIdNot(anyString(), any());
+        }
+
+        @Test
+        @DisplayName("mesmo nome com outra caixa: permitido, pois a checagem ignora o próprio produto")
+        void mesmoNomeDoProprioProduto() {
+            when(produtoRepository.findById(id)).thenReturn(Optional.of(existente));
+            when(produtoRepository.existsByNomeIgnoreCaseAndIdNot("PÃO FRANCÊS", id)).thenReturn(false);
+
+            produtoService.atualizarParcialmente(id, new ProdutoPatchRequest("PÃO FRANCÊS", null, null));
+
+            assertThat(existente.getNome()).isEqualTo("PÃO FRANCÊS");
+        }
+
+        @Test
+        @DisplayName("nome de outro produto: lança exceção e não altera nada")
+        void nomeDuplicado() {
+            when(produtoRepository.findById(id)).thenReturn(Optional.of(existente));
+            when(produtoRepository.existsByNomeIgnoreCaseAndIdNot("Sonho", id)).thenReturn(true);
+
+            assertThatThrownBy(() -> produtoService.atualizarParcialmente(
+                    id, new ProdutoPatchRequest("Sonho", new BigDecimal("5.00"), false)))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("Sonho");
+
+            // a checagem acontece antes de qualquer alteração
+            assertThat(existente.getNome()).isEqualTo("Pão francês");
+            assertThat(existente.getPreco()).isEqualByComparingTo("0.80");
+            assertThat(existente.getStatus()).isTrue();
+        }
+
+        @Test
+        @DisplayName("id inexistente: lança 404 sem checar nome nem salvar")
+        void produtoInexistente() {
+            when(produtoRepository.findById(id)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> produtoService.atualizarParcialmente(
+                    id, new ProdutoPatchRequest("Qualquer", null, null)))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode())
+                            .isEqualTo(HttpStatus.NOT_FOUND));
+
+            verify(produtoRepository, never()).existsByNomeIgnoreCaseAndIdNot(anyString(), any());
+            verify(produtoRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("nunca cria produto novo (se salvar, é o mesmo id)")
+        void naoCriaProdutoNovo() {
+            when(produtoRepository.findById(id)).thenReturn(Optional.of(existente));
+            when(produtoRepository.existsByNomeIgnoreCaseAndIdNot("Sonho de creme", id)).thenReturn(false);
+
+            produtoService.atualizarParcialmente(id, new ProdutoPatchRequest("Sonho de creme", null, null));
+
+            ArgumentCaptor<Produto> captor = ArgumentCaptor.forClass(Produto.class);
+            verify(produtoRepository, atMost(1)).save(captor.capture());
+            captor.getAllValues().forEach(salvo -> assertThat(salvo.getId()).isEqualTo(id));
+        }
     }
 
-    @Test
-    @DisplayName("listar com status false busca só os inativos")
-    void listarSoInativos() {
-        Produto inativo = produto("Sonho", "6.50", false);
-        when(produtoRepository.findByStatus(false)).thenReturn(List.of(inativo));
+    // =====================================================================
+    @Nested
+    @DisplayName("listar")
+    class Listar {
 
-        List<ProdutoResponse> response = produtoService.listar(false);
+        private final List<Produto> produtos = List.of(
+                produto(UUID.randomUUID(), "Baguete", "9.90", true),
+                produto(UUID.randomUUID(), "Sonho", "6.50", false));
 
-        assertThat(response).hasSize(1);
-        assertThat(response.get(0).nome()).isEqualTo("Sonho");
-        assertThat(response.get(0).ativo()).isFalse();
+        @Test
+        @DisplayName("sem status e ordem asc: busca todos ordenados por nome A→Z")
+        void todosAsc() {
+            when(produtoRepository.findAll(NOME_ASC)).thenReturn(produtos);
 
-        verify(produtoRepository, never()).findAll();
-    }
+            List<ProdutoResponse> response = produtoService.listar(null, "asc");
 
-    @Test
-    @DisplayName("listar sem resultados devolve lista vazia")
-    void listarVazio() {
-        when(produtoRepository.findByStatus(true)).thenReturn(List.of());
+            assertThat(response).extracting(ProdutoResponse::nome).containsExactly("Baguete", "Sonho");
+            verify(produtoRepository, never()).findByStatus(anyBoolean(), any());
+        }
 
-        assertThat(produtoService.listar(true)).isEmpty();
+        @Test
+        @DisplayName("sem status e ordem desc: busca todos ordenados por nome Z→A")
+        void todosDesc() {
+            when(produtoRepository.findAll(NOME_DESC)).thenReturn(produtos.reversed());
+
+            List<ProdutoResponse> response = produtoService.listar(null, "desc");
+
+            assertThat(response).extracting(ProdutoResponse::nome).containsExactly("Sonho", "Baguete");
+        }
+
+        @Test
+        @DisplayName("status true: busca só os ativos com a ordenação pedida")
+        void soAtivos() {
+            List<Produto> ativos = List.of(produtos.get(0));
+            when(produtoRepository.findByStatus(true, NOME_ASC)).thenReturn(ativos);
+
+            List<ProdutoResponse> response = produtoService.listar(true, "asc");
+
+            assertThat(response).hasSize(1);
+            assertThat(response.get(0).ativo()).isTrue();
+            verify(produtoRepository, never()).findAll(any(Sort.class));
+        }
+
+        @Test
+        @DisplayName("status false: busca só os inativos com a ordenação pedida")
+        void soInativos() {
+            List<Produto> inativos = List.of(produtos.get(1));
+            when(produtoRepository.findByStatus(false, NOME_DESC)).thenReturn(inativos);
+
+            List<ProdutoResponse> response = produtoService.listar(false, "desc");
+
+            assertThat(response).hasSize(1);
+            assertThat(response.get(0).ativo()).isFalse();
+        }
+
+        @Test
+        @DisplayName("ordem aceita maiúsculas e minúsculas (ASC, Desc...)")
+        void ordemIgnoraCaixa() {
+            when(produtoRepository.findAll(NOME_ASC)).thenReturn(produtos);
+            when(produtoRepository.findAll(NOME_DESC)).thenReturn(produtos.reversed());
+
+            assertThat(produtoService.listar(null, "ASC")).hasSize(2);
+            assertThat(produtoService.listar(null, "Desc")).hasSize(2);
+        }
+
+        @Test
+        @DisplayName("sem resultados: devolve lista vazia")
+        void vazio() {
+            when(produtoRepository.findByStatus(false, NOME_ASC)).thenReturn(List.of());
+
+            assertThat(produtoService.listar(false, "asc")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("ordem inválida: lança exceção sem consultar o banco")
+        void ordemInvalida() {
+            assertThatThrownBy(() -> produtoService.listar(null, "xyz"))
+                    .isInstanceOf(IllegalArgumentException.class);
+
+            verify(produtoRepository, never()).findAll(any(Sort.class));
+            verify(produtoRepository, never()).findByStatus(anyBoolean(), any());
+        }
     }
 }

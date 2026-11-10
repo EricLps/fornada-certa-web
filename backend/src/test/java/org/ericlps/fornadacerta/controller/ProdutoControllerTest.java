@@ -4,7 +4,9 @@ import org.ericlps.fornadacerta.dto.ProdutoPatchRequest;
 import org.ericlps.fornadacerta.dto.ProdutoRequest;
 import org.ericlps.fornadacerta.dto.ProdutoResponse;
 import org.ericlps.fornadacerta.service.ProdutoService;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +23,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -28,11 +31,10 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-// Sobe só a camada web (controller, JSON, validação), sem banco.
+// Sobe só a camada web (rotas, JSON, validação), com o service simulado e sem banco.
 @WebMvcTest(ProdutoController.class)
 class ProdutoControllerTest {
 
@@ -42,284 +44,346 @@ class ProdutoControllerTest {
     @MockitoBean
     private ProdutoService produtoService;
 
-    @Test
-    @DisplayName("POST /produto com dados válidos devolve 201 e o produto criado")
-    void cadastrarValido() throws Exception {
-        UUID id = UUID.randomUUID();
-        when(produtoService.cadastrarProduto(any(ProdutoRequest.class)))
-                .thenReturn(new ProdutoResponse(id, "Pão francês", new BigDecimal("0.80"), true));
+    // =====================================================================
+    @Nested
+    @DisplayName("POST /produto")
+    class Cadastrar {
 
-        mockMvc.perform(post("/produto")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                { "nome": "Pão francês", "preco": 0.80 }
-                                """))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.id").value(id.toString()))
-                .andExpect(jsonPath("$.nome").value("Pão francês"))
-                .andExpect(jsonPath("$.valor").value(0.8))
-                .andExpect(jsonPath("$.ativo").value(true));
+        private void postJson(String json, int statusEsperado) throws Exception {
+            mockMvc.perform(post("/produto").contentType(MediaType.APPLICATION_JSON).content(json))
+                    .andExpect(status().is(statusEsperado));
+        }
+
+        @Test
+        @DisplayName("dados válidos: 201 com o produto criado")
+        void valido() throws Exception {
+            UUID id = UUID.randomUUID();
+            when(produtoService.cadastrarProduto(any(ProdutoRequest.class)))
+                    .thenReturn(new ProdutoResponse(id, "Pão francês", new BigDecimal("0.80"), true));
+
+            mockMvc.perform(post("/produto")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    { "nome": "Pão francês", "preco": 0.80 }
+                                    """))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.id").value(id.toString()))
+                    .andExpect(jsonPath("$.nome").value("Pão francês"))
+                    .andExpect(jsonPath("$.valor").value(0.8))
+                    .andExpect(jsonPath("$.ativo").value(true));
+        }
+
+        @Test
+        @DisplayName("repassa ao service exatamente o que veio no JSON")
+        void repassaRequest() throws Exception {
+            when(produtoService.cadastrarProduto(any(ProdutoRequest.class)))
+                    .thenReturn(new ProdutoResponse(UUID.randomUUID(), "Sonho", new BigDecimal("6.50"), true));
+
+            postJson("""
+                    { "nome": "Sonho", "preco": 6.50 }
+                    """, 201);
+
+            ArgumentCaptor<ProdutoRequest> captor = ArgumentCaptor.forClass(ProdutoRequest.class);
+            verify(produtoService).cadastrarProduto(captor.capture());
+            assertThat(captor.getValue().nome()).isEqualTo("Sonho");
+            assertThat(captor.getValue().preco()).isEqualByComparingTo("6.50");
+        }
+
+        @Test
+        @DisplayName("nome vazio, só com espaços ou ausente: 400 sem chamar o service")
+        void nomeInvalido() throws Exception {
+            postJson("""
+                    { "nome": "", "preco": 0.80 }
+                    """, 400);
+            postJson("""
+                    { "nome": "   ", "preco": 0.80 }
+                    """, 400);
+            postJson("""
+                    { "preco": 0.80 }
+                    """, 400);
+
+            verify(produtoService, never()).cadastrarProduto(any());
+        }
+
+        @Test
+        @DisplayName("preço ausente, zero, negativo ou texto: 400 sem chamar o service")
+        void precoInvalido() throws Exception {
+            postJson("""
+                    { "nome": "Pão francês" }
+                    """, 400);
+            postJson("""
+                    { "nome": "Pão francês", "preco": 0 }
+                    """, 400);
+            postJson("""
+                    { "nome": "Pão francês", "preco": -1 }
+                    """, 400);
+            postJson("""
+                    { "nome": "Pão francês", "preco": "abc" }
+                    """, 400);
+
+            verify(produtoService, never()).cadastrarProduto(any());
+        }
+
+        @Test
+        @DisplayName("sem corpo ou JSON malformado: 400")
+        void corpoInvalido() throws Exception {
+            mockMvc.perform(post("/produto").contentType(MediaType.APPLICATION_JSON))
+                    .andExpect(status().isBadRequest());
+            postJson("{ \"nome\": \"Pão\", ", 400);
+
+            verify(produtoService, never()).cadastrarProduto(any());
+        }
+
+        @Test
+        @DisplayName("corpo que não é JSON: 415 Unsupported Media Type")
+        void naoEhJson() throws Exception {
+            mockMvc.perform(post("/produto").contentType(MediaType.TEXT_PLAIN).content("Pão francês"))
+                    .andExpect(status().isUnsupportedMediaType());
+
+            verify(produtoService, never()).cadastrarProduto(any());
+        }
+
+        @Test
+        @Disabled("Ative quando o @RestControllerAdvice converter nome duplicado em 409")
+        @DisplayName("nome duplicado: 409 Conflict")
+        void nomeDuplicado() throws Exception {
+            when(produtoService.cadastrarProduto(any(ProdutoRequest.class)))
+                    .thenThrow(new IllegalArgumentException("Já existe um produto cadastrado como: Pão francês"));
+
+            postJson("""
+                    { "nome": "Pão francês", "preco": 0.80 }
+                    """, 409);
+        }
     }
 
-    @Test
-    @DisplayName("POST /produto sem nome devolve 400 e não chama o service")
-    void cadastrarSemNome() throws Exception {
-        mockMvc.perform(post("/produto")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                { "nome": "", "preco": 0.80 }
-                                """))
-                .andExpect(status().isBadRequest());
+    // =====================================================================
+    @Nested
+    @DisplayName("PATCH /produto/{id}")
+    class AtualizarParcialmente {
 
-        verify(produtoService, never()).cadastrarProduto(any());
+        private final UUID id = UUID.randomUUID();
+
+        private void patchJson(Object idNaUrl, String json, int statusEsperado) throws Exception {
+            mockMvc.perform(patch("/produto/{id}", idNaUrl).contentType(MediaType.APPLICATION_JSON).content(json))
+                    .andExpect(status().is(statusEsperado));
+        }
+
+        @Test
+        @DisplayName("só um campo: 200 com o produto atualizado")
+        void soUmCampo() throws Exception {
+            when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
+                    .thenReturn(new ProdutoResponse(id, "Pão de sal", new BigDecimal("0.80"), true));
+
+            mockMvc.perform(patch("/produto/{id}", id)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    { "nome": "Pão de sal" }
+                                    """))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(id.toString()))
+                    .andExpect(jsonPath("$.nome").value("Pão de sal"))
+                    .andExpect(jsonPath("$.valor").value(0.8))
+                    .andExpect(jsonPath("$.ativo").value(true));
+        }
+
+        @Test
+        @DisplayName("só status (botão da listagem): campos ausentes chegam nulos ao service")
+        void soStatus() throws Exception {
+            when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
+                    .thenReturn(new ProdutoResponse(id, "Pão francês", new BigDecimal("0.80"), false));
+
+            patchJson(id, """
+                    { "status": false }
+                    """, 200);
+
+            ArgumentCaptor<ProdutoPatchRequest> captor = ArgumentCaptor.forClass(ProdutoPatchRequest.class);
+            verify(produtoService).atualizarParcialmente(eq(id), captor.capture());
+            assertThat(captor.getValue().status()).isFalse();
+            assertThat(captor.getValue().nome()).isNull();
+            assertThat(captor.getValue().preco()).isNull();
+        }
+
+        @Test
+        @DisplayName("todos os campos juntos: 200")
+        void todosOsCampos() throws Exception {
+            when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
+                    .thenReturn(new ProdutoResponse(id, "Pão integral", new BigDecimal("1.20"), false));
+
+            patchJson(id, """
+                    { "nome": "Pão integral", "preco": 1.20, "status": false }
+                    """, 200);
+        }
+
+        @Test
+        @DisplayName("corpo vazio {}: 200, pois nada para alterar é válido")
+        void corpoVazio() throws Exception {
+            when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
+                    .thenReturn(new ProdutoResponse(id, "Pão francês", new BigDecimal("0.80"), true));
+
+            patchJson(id, "{}", 200);
+        }
+
+        @Test
+        @DisplayName("nome vazio ou acima de 100 caracteres: 400 sem chamar o service")
+        void nomeInvalido() throws Exception {
+            patchJson(id, """
+                    { "nome": "" }
+                    """, 400);
+            patchJson(id, "{ \"nome\": \"" + "a".repeat(101) + "\" }", 400);
+
+            verify(produtoService, never()).atualizarParcialmente(any(), any());
+        }
+
+        @Test
+        @DisplayName("preço zero, negativo ou texto: 400 sem chamar o service")
+        void precoInvalido() throws Exception {
+            patchJson(id, """
+                    { "preco": 0 }
+                    """, 400);
+            patchJson(id, """
+                    { "preco": -5 }
+                    """, 400);
+            patchJson(id, """
+                    { "preco": "abc" }
+                    """, 400);
+
+            verify(produtoService, never()).atualizarParcialmente(any(), any());
+        }
+
+        @Test
+        @DisplayName("status que não é booleano: 400 sem chamar o service")
+        void statusInvalido() throws Exception {
+            patchJson(id, """
+                    { "status": "talvez" }
+                    """, 400);
+
+            verify(produtoService, never()).atualizarParcialmente(any(), any());
+        }
+
+        @Test
+        @DisplayName("id que não é UUID: 400 sem chamar o service")
+        void idInvalido() throws Exception {
+            patchJson("abc", """
+                    { "nome": "Pão de sal" }
+                    """, 400);
+
+            verify(produtoService, never()).atualizarParcialmente(any(), any());
+        }
+
+        @Test
+        @DisplayName("sem corpo: 400")
+        void semCorpo() throws Exception {
+            mockMvc.perform(patch("/produto/{id}", id).contentType(MediaType.APPLICATION_JSON))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("produto inexistente: 404")
+        void inexistente() throws Exception {
+            when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
+                    .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Produto não encontrado"));
+
+            patchJson(id, """
+                    { "nome": "Pão de sal" }
+                    """, 404);
+        }
+
+        @Test
+        @Disabled("Ative quando o @RestControllerAdvice converter nome duplicado em 409")
+        @DisplayName("nome de outro produto: 409 Conflict")
+        void nomeDuplicado() throws Exception {
+            when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
+                    .thenThrow(new IllegalArgumentException("Já existe um produto cadastrado como: Sonho"));
+
+            patchJson(id, """
+                    { "nome": "Sonho" }
+                    """, 409);
+        }
     }
 
-    @Test
-    @DisplayName("POST /produto sem preço devolve 400 e não chama o service")
-    void cadastrarSemPreco() throws Exception {
-        mockMvc.perform(post("/produto")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                { "nome": "Pão francês" }
-                                """))
-                .andExpect(status().isBadRequest());
+    // =====================================================================
+    @Nested
+    @DisplayName("GET /produto")
+    class Listar {
 
-        verify(produtoService, never()).cadastrarProduto(any());
-    }
+        private final List<ProdutoResponse> lista = List.of(
+                new ProdutoResponse(UUID.randomUUID(), "Baguete", new BigDecimal("9.90"), true),
+                new ProdutoResponse(UUID.randomUUID(), "Sonho", new BigDecimal("6.50"), false));
 
-    @Test
-    @DisplayName("POST /produto com preço negativo ou zero devolve 400")
-    void cadastrarPrecoInvalido() throws Exception {
-        mockMvc.perform(post("/produto")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                { "nome": "Pão francês", "preco": -1 }
-                                """))
-                .andExpect(status().isBadRequest());
+        @Test
+        @DisplayName("sem parâmetros: 200, todos os produtos, ordem padrão ASC")
+        void semParametros() throws Exception {
+            when(produtoService.listar(null, "ASC")).thenReturn(lista);
 
-        mockMvc.perform(post("/produto")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                { "nome": "Pão francês", "preco": 0 }
-                                """))
-                .andExpect(status().isBadRequest());
+            mockMvc.perform(get("/produto"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(2))
+                    .andExpect(jsonPath("$[0].nome").value("Baguete"))
+                    .andExpect(jsonPath("$[1].nome").value("Sonho"));
 
-        verify(produtoService, never()).cadastrarProduto(any());
-    }
+            verify(produtoService).listar(null, "ASC");
+        }
 
-    @Test
-    @DisplayName("POST /produto sem corpo devolve 400")
-    void cadastrarSemCorpo() throws Exception {
-        mockMvc.perform(post("/produto")
-                        .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isBadRequest());
-    }
+        @Test
+        @DisplayName("status=true: repassa o filtro de ativos")
+        void soAtivos() throws Exception {
+            when(produtoService.listar(true, "ASC")).thenReturn(List.of(lista.get(0)));
 
-    @Test
-    @DisplayName("PATCH /produto/{id} com só um campo devolve 200 e o produto atualizado")
-    void atualizarParcialmenteValido() throws Exception {
-        UUID id = UUID.randomUUID();
-        when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
-                .thenReturn(new ProdutoResponse(id, "Pão francês", new BigDecimal("1.50"), true));
+            mockMvc.perform(get("/produto").param("status", "true"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(1))
+                    .andExpect(jsonPath("$[0].ativo").value(true));
+        }
 
-        mockMvc.perform(patch("/produto/{id}", id)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                { "preco": 1.50 }
-                                """))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(id.toString()))
-                .andExpect(jsonPath("$.nome").value("Pão francês"))
-                .andExpect(jsonPath("$.valor").value(1.5))
-                .andExpect(jsonPath("$.ativo").value(true));
-    }
+        @Test
+        @DisplayName("status=false: repassa o filtro de inativos")
+        void soInativos() throws Exception {
+            when(produtoService.listar(false, "ASC")).thenReturn(List.of(lista.get(1)));
 
-    @Test
-    @DisplayName("PATCH /produto/{id} repassa ao service só os campos enviados")
-    void atualizarParcialmenteRepassaCampos() throws Exception {
-        UUID id = UUID.randomUUID();
-        when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
-                .thenReturn(new ProdutoResponse(id, "Pão francês", new BigDecimal("0.80"), false));
+            mockMvc.perform(get("/produto").param("status", "false"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[0].ativo").value(false));
+        }
 
-        mockMvc.perform(patch("/produto/{id}", id)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                { "status": false }
-                                """))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.ativo").value(false));
+        @Test
+        @DisplayName("ordem=desc com status: repassa os dois parâmetros")
+        void ordemDescComStatus() throws Exception {
+            when(produtoService.listar(true, "desc")).thenReturn(List.of(lista.get(0)));
 
-        ArgumentCaptor<ProdutoPatchRequest> captor = ArgumentCaptor.forClass(ProdutoPatchRequest.class);
-        verify(produtoService).atualizarParcialmente(eq(id), captor.capture());
-        assertThat(captor.getValue().nome()).isNull();
-        assertThat(captor.getValue().preco()).isNull();
-        assertThat(captor.getValue().status()).isFalse();
-    }
+            mockMvc.perform(get("/produto").param("status", "true").param("ordem", "desc"))
+                    .andExpect(status().isOk());
 
-    @Test
-    @DisplayName("PATCH /produto/{id} com corpo vazio ({}) devolve 200")
-    void atualizarParcialmenteCorpoVazio() throws Exception {
-        UUID id = UUID.randomUUID();
-        when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
-                .thenReturn(new ProdutoResponse(id, "Pão francês", new BigDecimal("0.80"), true));
+            verify(produtoService).listar(true, "desc");
+        }
 
-        mockMvc.perform(patch("/produto/{id}", id)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
-                .andExpect(status().isOk());
-    }
+        @Test
+        @DisplayName("nenhum produto: 200 com lista vazia")
+        void vazio() throws Exception {
+            when(produtoService.listar(null, "ASC")).thenReturn(List.of());
 
-    @Test
-    @DisplayName("PATCH /produto/{id} de produto inexistente devolve 404")
-    void atualizarParcialmenteInexistente() throws Exception {
-        UUID id = UUID.randomUUID();
-        when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
-                .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Produto não encontrado"));
+            mockMvc.perform(get("/produto"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(0));
+        }
 
-        mockMvc.perform(patch("/produto/{id}", id)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                { "nome": "Pão integral" }
-                                """))
-                .andExpect(status().isNotFound());
-    }
+        @Test
+        @DisplayName("status que não é booleano: 400 sem chamar o service")
+        void statusInvalido() throws Exception {
+            mockMvc.perform(get("/produto").param("status", "abc"))
+                    .andExpect(status().isBadRequest());
 
-    @Test
-    @DisplayName("PATCH /produto/{id} com nome vazio devolve 400 e não chama o service")
-    void atualizarParcialmenteNomeVazio() throws Exception {
-        mockMvc.perform(patch("/produto/{id}", UUID.randomUUID())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                { "nome": "" }
-                                """))
-                .andExpect(status().isBadRequest());
+            verify(produtoService, never()).listar(any(), anyString());
+        }
 
-        verify(produtoService, never()).atualizarParcialmente(any(), any());
-    }
+        @Test
+        @Disabled("Ative quando o @RestControllerAdvice converter ordem inválida em 400")
+        @DisplayName("ordem inválida: 400 Bad Request")
+        void ordemInvalida() throws Exception {
+            when(produtoService.listar(null, "xyz"))
+                    .thenThrow(new IllegalArgumentException("Invalid value 'xyz' for orders given"));
 
-    @Test
-    @DisplayName("PATCH /produto/{id} com preço negativo ou zero devolve 400 e não chama o service")
-    void atualizarParcialmentePrecoInvalido() throws Exception {
-        mockMvc.perform(patch("/produto/{id}", UUID.randomUUID())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                { "preco": -1 }
-                                """))
-                .andExpect(status().isBadRequest());
-
-        mockMvc.perform(patch("/produto/{id}", UUID.randomUUID())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                { "preco": 0 }
-                                """))
-                .andExpect(status().isBadRequest());
-
-        verify(produtoService, never()).atualizarParcialmente(any(), any());
-    }
-
-    @Test
-    @DisplayName("PATCH /produto/{id} com nome acima de 100 caracteres devolve 400")
-    void atualizarParcialmenteNomeLongo() throws Exception {
-        String nomeLongo = "a".repeat(101);
-
-        mockMvc.perform(patch("/produto/{id}", UUID.randomUUID())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{ \"nome\": \"" + nomeLongo + "\" }"))
-                .andExpect(status().isBadRequest());
-
-        verify(produtoService, never()).atualizarParcialmente(any(), any());
-    }
-
-    @Test
-    @DisplayName("PATCH /produto/{id} com id que não é UUID devolve 400")
-    void atualizarParcialmenteIdInvalido() throws Exception {
-        mockMvc.perform(patch("/produto/abc")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                { "nome": "Pão integral" }
-                                """))
-                .andExpect(status().isBadRequest());
-
-        verify(produtoService, never()).atualizarParcialmente(any(), any());
-    }
-
-    @Test
-    @DisplayName("PATCH /produto/{id} sem corpo devolve 400")
-    void atualizarParcialmenteSemCorpo() throws Exception {
-        mockMvc.perform(patch("/produto/{id}", UUID.randomUUID())
-                        .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isBadRequest());
-
-        verify(produtoService, never()).atualizarParcialmente(any(), any());
-    }
-
-    @Test
-    @DisplayName("GET /produto sem filtro devolve 200 e a lista completa")
-    void listarSemFiltro() throws Exception {
-        UUID id1 = UUID.randomUUID();
-        UUID id2 = UUID.randomUUID();
-        when(produtoService.listar(null)).thenReturn(List.of(
-                new ProdutoResponse(id1, "Pão francês", new BigDecimal("0.80"), true),
-                new ProdutoResponse(id2, "Sonho", new BigDecimal("6.50"), false)));
-
-        mockMvc.perform(get("/produto"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2))
-                .andExpect(jsonPath("$[0].id").value(id1.toString()))
-                .andExpect(jsonPath("$[0].nome").value("Pão francês"))
-                .andExpect(jsonPath("$[0].valor").value(0.8))
-                .andExpect(jsonPath("$[0].ativo").value(true))
-                .andExpect(jsonPath("$[1].id").value(id2.toString()))
-                .andExpect(jsonPath("$[1].ativo").value(false));
-
-        verify(produtoService).listar(null);
-    }
-
-    @Test
-    @DisplayName("GET /produto?status=true repassa true ao service")
-    void listarSoAtivos() throws Exception {
-        when(produtoService.listar(true)).thenReturn(List.of(
-                new ProdutoResponse(UUID.randomUUID(), "Pão francês", new BigDecimal("0.80"), true)));
-
-        mockMvc.perform(get("/produto").param("status", "true"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].ativo").value(true));
-
-        verify(produtoService).listar(true);
-    }
-
-    @Test
-    @DisplayName("GET /produto?status=false repassa false ao service")
-    void listarSoInativos() throws Exception {
-        when(produtoService.listar(false)).thenReturn(List.of(
-                new ProdutoResponse(UUID.randomUUID(), "Sonho", new BigDecimal("6.50"), false)));
-
-        mockMvc.perform(get("/produto").param("status", "false"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].ativo").value(false));
-
-        verify(produtoService).listar(false);
-    }
-
-    @Test
-    @DisplayName("GET /produto sem produtos devolve 200 e lista vazia")
-    void listarVazio() throws Exception {
-        when(produtoService.listar(null)).thenReturn(List.of());
-
-        mockMvc.perform(get("/produto"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray())
-                .andExpect(jsonPath("$.length()").value(0));
-    }
-
-    @Test
-    @DisplayName("GET /produto?status=abc devolve 400 e não chama o service")
-    void listarStatusInvalido() throws Exception {
-        mockMvc.perform(get("/produto").param("status", "abc"))
-                .andExpect(status().isBadRequest());
-
-        verify(produtoService, never()).listar(any());
+            mockMvc.perform(get("/produto").param("ordem", "xyz"))
+                    .andExpect(status().isBadRequest());
+        }
     }
 }
