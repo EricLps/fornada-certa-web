@@ -7,12 +7,12 @@ import org.ericlps.fornadacerta.dto.ProdutoResponse;
 import org.ericlps.fornadacerta.entity.Produto;
 import org.ericlps.fornadacerta.mapper.ProdutoMapper;
 import org.ericlps.fornadacerta.repository.ProdutoRepository;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -23,11 +23,18 @@ public class ProdutoService {
     private final ProdutoRepository produtoRepository;
     private final ProdutoMapper produtoMapper;
 
-    public ProdutoResponse cadastrarProduto(ProdutoRequest request){
+    public ProdutoResponse cadastrarProduto(ProdutoRequest request) {
 
-        Produto produto = produtoMapper.toEntity(request);
-        Produto salvo = produtoRepository.save(produto);
-        return produtoMapper.toResponse(salvo);
+        if (produtoRepository.existsByNomeIgnoreCase(request.nome())) {
+
+            throw new IllegalArgumentException("Já existe um produto cadastrado como: " + request.nome());
+
+        } else {
+
+            Produto produto = produtoMapper.toEntity(request);
+            Produto salvo = produtoRepository.save(produto);
+            return produtoMapper.toResponse(salvo);
+        }
 
     }
 
@@ -36,17 +43,21 @@ public class ProdutoService {
 
         Produto produto = produtoRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Produto não encontrado"));
 
-        if(request.nome() != null){
+        if (request.nome() != null) {
+
+            if (produtoRepository.existsByNomeIgnoreCaseAndIdNot(request.nome(), id)) {
+                throw new IllegalArgumentException("Já existe um produto cadastrado como: " + request.nome());
+            }
 
             produto.setNome(request.nome());
 
         }
-        if(request.preco() != null){
+        if (request.preco() != null) {
 
             produto.setPreco(request.preco());
 
         }
-        if(request.status() != null){
+        if (request.status() != null) {
 
             produto.setStatus(request.status());
 
@@ -54,15 +65,20 @@ public class ProdutoService {
 
         return produtoMapper.toResponse(produto);
 
+
     }
 
-    public List<ProdutoResponse> listar(Boolean status){
+
+    public List<ProdutoResponse> listar(Boolean status, String ordem) {
+
+        Sort sort = Sort.by(Sort.Direction.fromString(ordem), "nome");
 
         List<Produto> produtos = (status == null)
-                ? produtoRepository.findAll()
-                : produtoRepository.findByStatus(status);
+                ? produtoRepository.findAll(sort)
+                : produtoRepository.findByStatus(status, sort);
 
         return produtoMapper.toResponseList(produtos);
 
     }
+
 }

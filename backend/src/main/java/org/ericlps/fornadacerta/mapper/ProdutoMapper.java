@@ -1,5 +1,6 @@
 package org.ericlps.fornadacerta.mapper;
 
+import org.ericlps.fornadacerta.dto.ProdutoPatchRequest;
 import org.ericlps.fornadacerta.dto.ProdutoRequest;
 import org.ericlps.fornadacerta.dto.ProdutoResponse;
 import org.ericlps.fornadacerta.entity.Produto;
@@ -23,11 +24,6 @@ public class ProdutoMapper {
                 produto.getPreco(),
                 produto.getStatus()
         );
-    }
-
-    public void atualizar(Produto produto, ProdutoRequest request){
-        produto.setNome(request.nome());
-        produto.setPreco(request.preco());
     }
 
     public List<ProdutoResponse> toResponseList(List<Produto> produtos){

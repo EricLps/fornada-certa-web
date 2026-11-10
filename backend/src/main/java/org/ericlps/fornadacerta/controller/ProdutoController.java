@@ -6,6 +6,7 @@ import org.ericlps.fornadacerta.dto.ProdutoPatchRequest;
 import org.ericlps.fornadacerta.dto.ProdutoRequest;
 import org.ericlps.fornadacerta.dto.ProdutoResponse;
 import org.ericlps.fornadacerta.service.ProdutoService;
+import org.springframework.boot.context.properties.bind.DefaultValue;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
@@ -39,9 +40,9 @@ public class ProdutoController {
     }
 
     @GetMapping()
-    public ResponseEntity<List<ProdutoResponse>> listar(@RequestParam(required = false) Boolean status){
+    public ResponseEntity<List<ProdutoResponse>> listar(@RequestParam(required = false) Boolean status, @RequestParam(defaultValue = "ASC") String ordem){
 
-        return ResponseEntity.ok(produtoService.listar(status));
+        return ResponseEntity.ok(produtoService.listar(status, ordem));
 
     }
 
