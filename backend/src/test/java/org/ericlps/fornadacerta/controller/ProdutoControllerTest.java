@@ -62,17 +62,18 @@ class ProdutoControllerTest {
         void valido() throws Exception {
             UUID id = UUID.randomUUID();
             when(produtoService.cadastrarProduto(any(ProdutoRequest.class)))
-                    .thenReturn(new ProdutoResponse(id, "Pão francês", new BigDecimal("0.80"), true));
+                    .thenReturn(new ProdutoResponse(id, "Pão francês", new BigDecimal("0.80"), new BigDecimal("0.40"), true));
 
             mockMvc.perform(post("/produto")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
-                                    { "nome": "Pão francês", "preco": 0.80 }
+                                    { "nome": "Pão francês", "preco": 0.80, "custo": 0.40 }
                                     """))
                     .andExpect(status().isCreated())
                     .andExpect(jsonPath("$.id").value(id.toString()))
                     .andExpect(jsonPath("$.nome").value("Pão francês"))
-                    .andExpect(jsonPath("$.valor").value(0.8))
+                    .andExpect(jsonPath("$.preco").value(0.8))
+                    .andExpect(jsonPath("$.custo").value(0.4))
                     .andExpect(jsonPath("$.ativo").value(true));
         }
 
@@ -80,29 +81,30 @@ class ProdutoControllerTest {
         @DisplayName("repassa ao service exatamente o que veio no JSON")
         void repassaRequest() throws Exception {
             when(produtoService.cadastrarProduto(any(ProdutoRequest.class)))
-                    .thenReturn(new ProdutoResponse(UUID.randomUUID(), "Sonho", new BigDecimal("6.50"), true));
+                    .thenReturn(new ProdutoResponse(UUID.randomUUID(), "Sonho", new BigDecimal("6.50"), new BigDecimal("3.25"), true));
 
             postJson("""
-                    { "nome": "Sonho", "preco": 6.50 }
+                    { "nome": "Sonho", "preco": 6.50, "custo": 0.40 }
                     """, 201);
 
             ArgumentCaptor<ProdutoRequest> captor = ArgumentCaptor.forClass(ProdutoRequest.class);
             verify(produtoService).cadastrarProduto(captor.capture());
             assertThat(captor.getValue().nome()).isEqualTo("Sonho");
             assertThat(captor.getValue().preco()).isEqualByComparingTo("6.50");
+            assertThat(captor.getValue().custo()).isEqualByComparingTo("0.40");
         }
 
         @Test
         @DisplayName("nome vazio, só com espaços ou ausente: 400 sem chamar o service")
         void nomeInvalido() throws Exception {
             postJson("""
-                    { "nome": "", "preco": 0.80 }
+                    { "nome": "", "preco": 0.80, "custo": 0.40 }
                     """, 400);
             postJson("""
-                    { "nome": "   ", "preco": 0.80 }
+                    { "nome": "   ", "preco": 0.80, "custo": 0.40 }
                     """, 400);
             postJson("""
-                    { "preco": 0.80 }
+                    { "preco": 0.80, "custo": 0.40 }
                     """, 400);
 
             verify(produtoService, never()).cadastrarProduto(any());
@@ -112,16 +114,36 @@ class ProdutoControllerTest {
         @DisplayName("preço ausente, zero, negativo ou texto: 400 sem chamar o service")
         void precoInvalido() throws Exception {
             postJson("""
-                    { "nome": "Pão francês" }
+                    { "nome": "Pão francês", "custo": 0.40 }
                     """, 400);
             postJson("""
-                    { "nome": "Pão francês", "preco": 0 }
+                    { "nome": "Pão francês", "preco": 0, "custo": 0.40 }
                     """, 400);
             postJson("""
-                    { "nome": "Pão francês", "preco": -1 }
+                    { "nome": "Pão francês", "preco": -1, "custo": 0.40 }
                     """, 400);
             postJson("""
-                    { "nome": "Pão francês", "preco": "abc" }
+                    { "nome": "Pão francês", "preco": "abc", "custo": 0.40 }
+                    """, 400);
+
+            verify(produtoService, never()).cadastrarProduto(any());
+        }
+
+        @Test
+        @DisplayName("custo ausente, zero, negativo ou texto: 400 com erros.custo, sem chamar o service")
+        void custoInvalido() throws Exception {
+            for (String json : new String[]{
+                    "{ \"nome\": \"Pão francês\", \"preco\": 0.80 }",
+                    "{ \"nome\": \"Pão francês\", \"preco\": 0.80, \"custo\": 0 }",
+                    "{ \"nome\": \"Pão francês\", \"preco\": 0.80, \"custo\": -0.10 }"}) {
+                mockMvc.perform(post("/produto").contentType(MediaType.APPLICATION_JSON).content(json))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.erros.custo").isNotEmpty())
+                        .andExpect(jsonPath("$.erros.nome").doesNotExist())
+                        .andExpect(jsonPath("$.erros.preco").doesNotExist());
+            }
+            postJson("""
+                    { "nome": "Pão francês", "preco": 0.80, "custo": "abc" }
                     """, 400);
 
             verify(produtoService, never()).cadastrarProduto(any());
@@ -155,7 +177,7 @@ class ProdutoControllerTest {
             mockMvc.perform(post("/produto")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
-                                    { "nome": "Pão francês", "preco": 0.80 }
+                                    { "nome": "Pão francês", "preco": 0.80, "custo": 0.40 }
                                     """))
                     .andExpect(status().isConflict())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
@@ -170,7 +192,7 @@ class ProdutoControllerTest {
             mockMvc.perform(post("/produto")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
-                                    { "nome": "", "preco": -1 }
+                                    { "nome": "", "preco": -1, "custo": 0.40 }
                                     """))
                     .andExpect(status().isBadRequest())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
@@ -189,7 +211,7 @@ class ProdutoControllerTest {
             mockMvc.perform(post("/produto")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
-                                    { "nome": "Pão francês", "preco": 0 }
+                                    { "nome": "Pão francês", "preco": 0, "custo": 0.40 }
                                     """))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.erros.preco").isNotEmpty())
@@ -206,7 +228,7 @@ class ProdutoControllerTest {
             mockMvc.perform(post("/produto")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
-                                    { "nome": "Pão francês", "preco": 0.80 }
+                                    { "nome": "Pão francês", "preco": 0.80, "custo": 0.40 }
                                     """))
                     .andExpect(status().isConflict())
                     .andExpect(jsonPath("$.title").value("Conflito"))
@@ -243,7 +265,7 @@ class ProdutoControllerTest {
         @DisplayName("só um campo: 200 com o produto atualizado")
         void soUmCampo() throws Exception {
             when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
-                    .thenReturn(new ProdutoResponse(id, "Pão de sal", new BigDecimal("0.80"), true));
+                    .thenReturn(new ProdutoResponse(id, "Pão de sal", new BigDecimal("0.80"), new BigDecimal("0.40"), true));
 
             mockMvc.perform(patch("/produto/{id}", id)
                             .contentType(MediaType.APPLICATION_JSON)
@@ -253,7 +275,7 @@ class ProdutoControllerTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.id").value(id.toString()))
                     .andExpect(jsonPath("$.nome").value("Pão de sal"))
-                    .andExpect(jsonPath("$.valor").value(0.8))
+                    .andExpect(jsonPath("$.preco").value(0.8))
                     .andExpect(jsonPath("$.ativo").value(true));
         }
 
@@ -261,7 +283,7 @@ class ProdutoControllerTest {
         @DisplayName("só status (botão da listagem): campos ausentes chegam nulos ao service")
         void soStatus() throws Exception {
             when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
-                    .thenReturn(new ProdutoResponse(id, "Pão francês", new BigDecimal("0.80"), false));
+                    .thenReturn(new ProdutoResponse(id, "Pão francês", new BigDecimal("0.80"), new BigDecimal("0.40"), false));
 
             patchJson(id, """
                     { "status": false }
@@ -275,13 +297,48 @@ class ProdutoControllerTest {
         }
 
         @Test
+        @DisplayName("só custo: chega ao service com os outros campos nulos")
+        void soCusto() throws Exception {
+            when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
+                    .thenReturn(new ProdutoResponse(id, "Pão francês", new BigDecimal("0.80"), new BigDecimal("0.45"), true));
+
+            mockMvc.perform(patch("/produto/{id}", id)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    { "custo": 0.45 }
+                                    """))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.custo").value(0.45));
+
+            ArgumentCaptor<ProdutoPatchRequest> captor = ArgumentCaptor.forClass(ProdutoPatchRequest.class);
+            verify(produtoService).atualizarParcialmente(eq(id), captor.capture());
+            assertThat(captor.getValue().custo()).isEqualByComparingTo("0.45");
+            assertThat(captor.getValue().nome()).isNull();
+            assertThat(captor.getValue().preco()).isNull();
+            assertThat(captor.getValue().status()).isNull();
+        }
+
+        @Test
+        @DisplayName("custo zero ou negativo: 400 com erros.custo, sem chamar o service")
+        void custoInvalido() throws Exception {
+            mockMvc.perform(patch("/produto/{id}", id).contentType(MediaType.APPLICATION_JSON).content("{ \"custo\": 0 }"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.erros.custo").isNotEmpty());
+            mockMvc.perform(patch("/produto/{id}", id).contentType(MediaType.APPLICATION_JSON).content("{ \"custo\": -1 }"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.erros.custo").isNotEmpty());
+
+            verify(produtoService, never()).atualizarParcialmente(any(), any());
+        }
+
+        @Test
         @DisplayName("todos os campos juntos: 200")
         void todosOsCampos() throws Exception {
             when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
-                    .thenReturn(new ProdutoResponse(id, "Pão integral", new BigDecimal("1.20"), false));
+                    .thenReturn(new ProdutoResponse(id, "Pão integral", new BigDecimal("1.20"), new BigDecimal("0.60"), false));
 
             patchJson(id, """
-                    { "nome": "Pão integral", "preco": 1.20, "status": false }
+                    { "nome": "Pão integral", "preco": 1.20, "custo": 0.60, "status": false }
                     """, 200);
         }
 
@@ -289,7 +346,7 @@ class ProdutoControllerTest {
         @DisplayName("corpo vazio {}: 200, pois nada para alterar é válido")
         void corpoVazio() throws Exception {
             when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
-                    .thenReturn(new ProdutoResponse(id, "Pão francês", new BigDecimal("0.80"), true));
+                    .thenReturn(new ProdutoResponse(id, "Pão francês", new BigDecimal("0.80"), new BigDecimal("0.40"), true));
 
             patchJson(id, "{}", 200);
         }
@@ -389,8 +446,8 @@ class ProdutoControllerTest {
     class Listar {
 
         private final List<ProdutoResponse> lista = List.of(
-                new ProdutoResponse(UUID.randomUUID(), "Baguete", new BigDecimal("9.90"), true),
-                new ProdutoResponse(UUID.randomUUID(), "Sonho", new BigDecimal("6.50"), false));
+                new ProdutoResponse(UUID.randomUUID(), "Baguete", new BigDecimal("9.90"), new BigDecimal("4.95"), true),
+                new ProdutoResponse(UUID.randomUUID(), "Sonho", new BigDecimal("6.50"), new BigDecimal("3.25"), false));
 
         @Test
         @DisplayName("sem parâmetros: 200, todos os produtos, ordem padrão ASC")

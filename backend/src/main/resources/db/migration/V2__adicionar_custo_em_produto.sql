@@ -1,0 +1,5 @@
+ALTER TABLE produto
+    ADD COLUMN custo NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (custo >= 0);
+
+ALTER TABLE produto
+    ALTER COLUMN custo DROP DEFAULT;
