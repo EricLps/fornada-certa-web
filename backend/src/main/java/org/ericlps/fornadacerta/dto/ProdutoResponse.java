@@ -5,6 +5,7 @@ import java.util.UUID;
 
 public record ProdutoResponse(UUID id,
                               String nome,
-                              BigDecimal valor,
+                              BigDecimal preco,
+                              BigDecimal custo,
                               boolean ativo) {
 }

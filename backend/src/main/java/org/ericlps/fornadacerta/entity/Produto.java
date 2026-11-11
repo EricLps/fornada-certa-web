@@ -1,7 +1,6 @@
 package org.ericlps.fornadacerta.entity;
 
 import jakarta.persistence.*;
-import jakarta.validation.constraints.Positive;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -22,9 +21,11 @@ public class Produto {
     @Column(nullable = false, unique = true)
     private String nome;
 
-    @Positive
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal preco;
+
+    @Column(nullable = false, precision = 10, scale = 2)
+    private BigDecimal custo;
 
     @Column(nullable = false)
     private Boolean status = true;

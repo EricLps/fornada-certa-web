@@ -8,6 +8,7 @@ import java.math.BigDecimal;
 public record ProdutoPatchRequest(
         @Size(min = 1, max = 100) String nome,
         @Positive BigDecimal preco,
+        @Positive BigDecimal custo,
         Boolean status
         ) {
 }

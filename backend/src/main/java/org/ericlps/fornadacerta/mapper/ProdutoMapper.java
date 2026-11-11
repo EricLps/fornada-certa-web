@@ -15,6 +15,7 @@ public class ProdutoMapper {
         Produto produto = new Produto();
         produto.setNome(request.nome());
         produto.setPreco(request.preco());
+        produto.setCusto(request.custo());
         return produto;
     }
 
@@ -22,6 +23,7 @@ public class ProdutoMapper {
         return new ProdutoResponse(produto.getId(),
                 produto.getNome(),
                 produto.getPreco(),
+                produto.getCusto(),
                 produto.getStatus()
         );
     }

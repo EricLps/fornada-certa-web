@@ -57,6 +57,13 @@ public class ProdutoService {
             produto.setPreco(request.preco());
 
         }
+
+        if(request.custo() != null){
+
+            produto.setCusto(request.custo());
+
+        }
+
         if (request.status() != null) {
 
             produto.setStatus(request.status());

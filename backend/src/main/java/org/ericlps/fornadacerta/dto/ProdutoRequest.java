@@ -7,5 +7,6 @@ import jakarta.validation.constraints.Positive;
 import java.math.BigDecimal;
 
 public record ProdutoRequest(@NotBlank String nome,
-                             @NotNull @Positive BigDecimal preco) {
+                             @NotNull @Positive BigDecimal preco,
+                             @NotNull @Positive BigDecimal custo) {
 }
