@@ -4,6 +4,8 @@ import org.ericlps.fornadacerta.dto.ProdutoPatchRequest;
 import org.ericlps.fornadacerta.dto.ProdutoRequest;
 import org.ericlps.fornadacerta.dto.ProdutoResponse;
 import org.ericlps.fornadacerta.entity.Produto;
+import org.ericlps.fornadacerta.exception.ConflitoException;
+import org.ericlps.fornadacerta.exception.RecursoNaoEncontradoException;
 import org.ericlps.fornadacerta.mapper.ProdutoMapper;
 import org.ericlps.fornadacerta.repository.ProdutoRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,8 +17,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Sort;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -109,7 +109,7 @@ class ProdutoServiceTest {
 
             assertThatThrownBy(() -> produtoService.cadastrarProduto(
                     new ProdutoRequest("Pão francês", new BigDecimal("0.80"))))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(ConflitoException.class)
                     .hasMessageContaining("Pão francês");
 
             verify(produtoRepository, never()).save(any());
@@ -236,7 +236,7 @@ class ProdutoServiceTest {
 
             assertThatThrownBy(() -> produtoService.atualizarParcialmente(
                     id, new ProdutoPatchRequest("Sonho", new BigDecimal("5.00"), false)))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(ConflitoException.class)
                     .hasMessageContaining("Sonho");
 
             // a checagem acontece antes de qualquer alteração
@@ -246,15 +246,14 @@ class ProdutoServiceTest {
         }
 
         @Test
-        @DisplayName("id inexistente: lança 404 sem checar nome nem salvar")
+        @DisplayName("id inexistente: lança RecursoNaoEncontradoException sem checar nome nem salvar")
         void produtoInexistente() {
             when(produtoRepository.findById(id)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> produtoService.atualizarParcialmente(
                     id, new ProdutoPatchRequest("Qualquer", null, null)))
-                    .isInstanceOf(ResponseStatusException.class)
-                    .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode())
-                            .isEqualTo(HttpStatus.NOT_FOUND));
+                    .isInstanceOf(RecursoNaoEncontradoException.class)
+                    .hasMessage("Produto não encontrado");
 
             verify(produtoRepository, never()).existsByNomeIgnoreCaseAndIdNot(anyString(), any());
             verify(produtoRepository, never()).save(any());
@@ -284,22 +283,22 @@ class ProdutoServiceTest {
                 produto(UUID.randomUUID(), "Sonho", "6.50", false));
 
         @Test
-        @DisplayName("sem status e ordem asc: busca todos ordenados por nome A→Z")
+        @DisplayName("sem status e ASC: busca todos ordenados por nome A→Z")
         void todosAsc() {
             when(produtoRepository.findAll(NOME_ASC)).thenReturn(produtos);
 
-            List<ProdutoResponse> response = produtoService.listar(null, "asc");
+            List<ProdutoResponse> response = produtoService.listar(null, Sort.Direction.ASC);
 
             assertThat(response).extracting(ProdutoResponse::nome).containsExactly("Baguete", "Sonho");
             verify(produtoRepository, never()).findByStatus(anyBoolean(), any());
         }
 
         @Test
-        @DisplayName("sem status e ordem desc: busca todos ordenados por nome Z→A")
+        @DisplayName("sem status e DESC: busca todos ordenados por nome Z→A")
         void todosDesc() {
             when(produtoRepository.findAll(NOME_DESC)).thenReturn(produtos.reversed());
 
-            List<ProdutoResponse> response = produtoService.listar(null, "desc");
+            List<ProdutoResponse> response = produtoService.listar(null, Sort.Direction.DESC);
 
             assertThat(response).extracting(ProdutoResponse::nome).containsExactly("Sonho", "Baguete");
         }
@@ -310,7 +309,7 @@ class ProdutoServiceTest {
             List<Produto> ativos = List.of(produtos.get(0));
             when(produtoRepository.findByStatus(true, NOME_ASC)).thenReturn(ativos);
 
-            List<ProdutoResponse> response = produtoService.listar(true, "asc");
+            List<ProdutoResponse> response = produtoService.listar(true, Sort.Direction.ASC);
 
             assertThat(response).hasSize(1);
             assertThat(response.get(0).ativo()).isTrue();
@@ -323,20 +322,10 @@ class ProdutoServiceTest {
             List<Produto> inativos = List.of(produtos.get(1));
             when(produtoRepository.findByStatus(false, NOME_DESC)).thenReturn(inativos);
 
-            List<ProdutoResponse> response = produtoService.listar(false, "desc");
+            List<ProdutoResponse> response = produtoService.listar(false, Sort.Direction.DESC);
 
             assertThat(response).hasSize(1);
             assertThat(response.get(0).ativo()).isFalse();
-        }
-
-        @Test
-        @DisplayName("ordem aceita maiúsculas e minúsculas (ASC, Desc...)")
-        void ordemIgnoraCaixa() {
-            when(produtoRepository.findAll(NOME_ASC)).thenReturn(produtos);
-            when(produtoRepository.findAll(NOME_DESC)).thenReturn(produtos.reversed());
-
-            assertThat(produtoService.listar(null, "ASC")).hasSize(2);
-            assertThat(produtoService.listar(null, "Desc")).hasSize(2);
         }
 
         @Test
@@ -344,17 +333,7 @@ class ProdutoServiceTest {
         void vazio() {
             when(produtoRepository.findByStatus(false, NOME_ASC)).thenReturn(List.of());
 
-            assertThat(produtoService.listar(false, "asc")).isEmpty();
-        }
-
-        @Test
-        @DisplayName("ordem inválida: lança exceção sem consultar o banco")
-        void ordemInvalida() {
-            assertThatThrownBy(() -> produtoService.listar(null, "xyz"))
-                    .isInstanceOf(IllegalArgumentException.class);
-
-            verify(produtoRepository, never()).findAll(any(Sort.class));
-            verify(produtoRepository, never()).findByStatus(anyBoolean(), any());
+            assertThat(produtoService.listar(false, Sort.Direction.ASC)).isEmpty();
         }
     }
 }

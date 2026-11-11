@@ -5,13 +5,13 @@ import org.ericlps.fornadacerta.dto.ProdutoPatchRequest;
 import org.ericlps.fornadacerta.dto.ProdutoRequest;
 import org.ericlps.fornadacerta.dto.ProdutoResponse;
 import org.ericlps.fornadacerta.entity.Produto;
+import org.ericlps.fornadacerta.exception.ConflitoException;
+import org.ericlps.fornadacerta.exception.RecursoNaoEncontradoException;
 import org.ericlps.fornadacerta.mapper.ProdutoMapper;
 import org.ericlps.fornadacerta.repository.ProdutoRepository;
 import org.springframework.data.domain.Sort;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.UUID;
@@ -27,7 +27,7 @@ public class ProdutoService {
 
         if (produtoRepository.existsByNomeIgnoreCase(request.nome())) {
 
-            throw new IllegalArgumentException("Já existe um produto cadastrado como: " + request.nome());
+            throw new ConflitoException("Já existe um produto cadastrado como: " + request.nome());
 
         } else {
 
@@ -41,12 +41,12 @@ public class ProdutoService {
     @Transactional
     public ProdutoResponse atualizarParcialmente(UUID id, ProdutoPatchRequest request) {
 
-        Produto produto = produtoRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Produto não encontrado"));
+        Produto produto = produtoRepository.findById(id).orElseThrow(() -> new RecursoNaoEncontradoException("Produto não encontrado"));
 
         if (request.nome() != null) {
 
             if (produtoRepository.existsByNomeIgnoreCaseAndIdNot(request.nome(), id)) {
-                throw new IllegalArgumentException("Já existe um produto cadastrado como: " + request.nome());
+                throw new ConflitoException("Já existe um produto cadastrado como: " + request.nome());
             }
 
             produto.setNome(request.nome());
@@ -69,9 +69,9 @@ public class ProdutoService {
     }
 
 
-    public List<ProdutoResponse> listar(Boolean status, String ordem) {
+    public List<ProdutoResponse> listar(Boolean status, Sort.Direction ordem) {
 
-        Sort sort = Sort.by(Sort.Direction.fromString(ordem), "nome");
+        Sort sort = Sort.by(ordem, "nome");
 
         List<Produto> produtos = (status == null)
                 ? produtoRepository.findAll(sort)

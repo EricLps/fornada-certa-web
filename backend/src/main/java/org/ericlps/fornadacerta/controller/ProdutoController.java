@@ -1,26 +1,25 @@
 package org.ericlps.fornadacerta.controller;
 
 import jakarta.validation.Valid;
-import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import org.ericlps.fornadacerta.dto.ProdutoPatchRequest;
 import org.ericlps.fornadacerta.dto.ProdutoRequest;
 import org.ericlps.fornadacerta.dto.ProdutoResponse;
 import org.ericlps.fornadacerta.service.ProdutoService;
-import org.springframework.boot.context.properties.bind.DefaultValue;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.UUID;
 
-@Controller
+@RestController
 @RequestMapping("/produto")
-@AllArgsConstructor
+@RequiredArgsConstructor
 public class ProdutoController {
 
-    private ProdutoService produtoService;
+    private final ProdutoService produtoService;
 
     @PostMapping
     public ResponseEntity<ProdutoResponse> cadastrarProduto(@RequestBody @Valid ProdutoRequest request){
@@ -40,7 +39,7 @@ public class ProdutoController {
     }
 
     @GetMapping()
-    public ResponseEntity<List<ProdutoResponse>> listar(@RequestParam(required = false) Boolean status, @RequestParam(defaultValue = "ASC") String ordem){
+    public ResponseEntity<List<ProdutoResponse>> listar(@RequestParam(required = false) Boolean status, @RequestParam(defaultValue = "ASC") Sort.Direction ordem){
 
         return ResponseEntity.ok(produtoService.listar(status, ordem));
 

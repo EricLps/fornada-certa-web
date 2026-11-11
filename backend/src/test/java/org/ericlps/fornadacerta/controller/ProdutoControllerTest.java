@@ -3,27 +3,29 @@ package org.ericlps.fornadacerta.controller;
 import org.ericlps.fornadacerta.dto.ProdutoPatchRequest;
 import org.ericlps.fornadacerta.dto.ProdutoRequest;
 import org.ericlps.fornadacerta.dto.ProdutoResponse;
+import org.ericlps.fornadacerta.exception.ConflitoException;
+import org.ericlps.fornadacerta.exception.RecursoNaoEncontradoException;
 import org.ericlps.fornadacerta.service.ProdutoService;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Sort;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -31,6 +33,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -144,15 +147,83 @@ class ProdutoControllerTest {
         }
 
         @Test
-        @Disabled("Ative quando o @RestControllerAdvice converter nome duplicado em 409")
-        @DisplayName("nome duplicado: 409 Conflict")
+        @DisplayName("nome duplicado: 409 com ProblemDetail (título fixo, detalhe vindo do service)")
         void nomeDuplicado() throws Exception {
             when(produtoService.cadastrarProduto(any(ProdutoRequest.class)))
-                    .thenThrow(new IllegalArgumentException("Já existe um produto cadastrado como: Pão francês"));
+                    .thenThrow(new ConflitoException("Já existe um produto cadastrado como: Pão francês"));
 
-            postJson("""
-                    { "nome": "Pão francês", "preco": 0.80 }
-                    """, 409);
+            mockMvc.perform(post("/produto")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    { "nome": "Pão francês", "preco": 0.80 }
+                                    """))
+                    .andExpect(status().isConflict())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                    .andExpect(jsonPath("$.status").value(409))
+                    .andExpect(jsonPath("$.title").value("Conflito"))
+                    .andExpect(jsonPath("$.detail").value("Já existe um produto cadastrado como: Pão francês"));
+        }
+
+        @Test
+        @DisplayName("campos inválidos: 400 com o mapa 'erros', uma entrada por campo")
+        void errosDeValidacaoPorCampo() throws Exception {
+            mockMvc.perform(post("/produto")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    { "nome": "", "preco": -1 }
+                                    """))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                    .andExpect(jsonPath("$.status").value(400))
+                    .andExpect(jsonPath("$.title").value("Dados inválidos"))
+                    .andExpect(jsonPath("$.detail").value("Um ou mais campos são inválidos."))
+                    .andExpect(jsonPath("$.erros.nome").isNotEmpty())
+                    .andExpect(jsonPath("$.erros.preco").isNotEmpty());
+
+            verify(produtoService, never()).cadastrarProduto(any());
+        }
+
+        @Test
+        @DisplayName("só um campo inválido: o mapa 'erros' traz só esse campo")
+        void erroEmUmCampoSo() throws Exception {
+            mockMvc.perform(post("/produto")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    { "nome": "Pão francês", "preco": 0 }
+                                    """))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.erros.preco").isNotEmpty())
+                    .andExpect(jsonPath("$.erros.nome").doesNotExist());
+        }
+
+        @Test
+        @DisplayName("conflito no banco (DataIntegrityViolation): 409 com mensagem genérica, sem vazar SQL")
+        void violacaoDeIntegridade() throws Exception {
+            when(produtoService.cadastrarProduto(any(ProdutoRequest.class)))
+                    .thenThrow(new DataIntegrityViolationException(
+                            "duplicate key value violates unique constraint \"produto_nome_key\" [insert into produto ...]"));
+
+            mockMvc.perform(post("/produto")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    { "nome": "Pão francês", "preco": 0.80 }
+                                    """))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.title").value("Conflito"))
+                    .andExpect(jsonPath("$.detail").value("Os dados conflitam com um registro existente."))
+                    .andExpect(content().string(not(containsString("produto_nome_key"))))
+                    .andExpect(content().string(not(containsString("insert into"))));
+        }
+
+        @Test
+        @DisplayName("JSON malformado: 400 também no formato ProblemDetail")
+        void jsonMalformadoEmProblemDetail() throws Exception {
+            mockMvc.perform(post("/produto")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{ \"nome\": \"Pão\", "))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                    .andExpect(jsonPath("$.status").value(400));
         }
     }
 
@@ -278,26 +349,37 @@ class ProdutoControllerTest {
         }
 
         @Test
-        @DisplayName("produto inexistente: 404")
+        @DisplayName("produto inexistente: 404 com ProblemDetail")
         void inexistente() throws Exception {
             when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
-                    .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Produto não encontrado"));
+                    .thenThrow(new RecursoNaoEncontradoException("Produto não encontrado"));
 
-            patchJson(id, """
-                    { "nome": "Pão de sal" }
-                    """, 404);
+            mockMvc.perform(patch("/produto/{id}", id)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    { "nome": "Pão de sal" }
+                                    """))
+                    .andExpect(status().isNotFound())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                    .andExpect(jsonPath("$.status").value(404))
+                    .andExpect(jsonPath("$.title").value("Recurso não encontrado"))
+                    .andExpect(jsonPath("$.detail").value("Produto não encontrado"));
         }
 
         @Test
-        @Disabled("Ative quando o @RestControllerAdvice converter nome duplicado em 409")
-        @DisplayName("nome de outro produto: 409 Conflict")
+        @DisplayName("nome de outro produto: 409 com o detalhe vindo do service")
         void nomeDuplicado() throws Exception {
             when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
-                    .thenThrow(new IllegalArgumentException("Já existe um produto cadastrado como: Sonho"));
+                    .thenThrow(new ConflitoException("Já existe um produto cadastrado como: Sonho"));
 
-            patchJson(id, """
-                    { "nome": "Sonho" }
-                    """, 409);
+            mockMvc.perform(patch("/produto/{id}", id)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    { "nome": "Sonho" }
+                                    """))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.title").value("Conflito"))
+                    .andExpect(jsonPath("$.detail").value("Já existe um produto cadastrado como: Sonho"));
         }
     }
 
@@ -313,7 +395,7 @@ class ProdutoControllerTest {
         @Test
         @DisplayName("sem parâmetros: 200, todos os produtos, ordem padrão ASC")
         void semParametros() throws Exception {
-            when(produtoService.listar(null, "ASC")).thenReturn(lista);
+            when(produtoService.listar(null, Sort.Direction.ASC)).thenReturn(lista);
 
             mockMvc.perform(get("/produto"))
                     .andExpect(status().isOk())
@@ -321,13 +403,13 @@ class ProdutoControllerTest {
                     .andExpect(jsonPath("$[0].nome").value("Baguete"))
                     .andExpect(jsonPath("$[1].nome").value("Sonho"));
 
-            verify(produtoService).listar(null, "ASC");
+            verify(produtoService).listar(null, Sort.Direction.ASC);
         }
 
         @Test
         @DisplayName("status=true: repassa o filtro de ativos")
         void soAtivos() throws Exception {
-            when(produtoService.listar(true, "ASC")).thenReturn(List.of(lista.get(0)));
+            when(produtoService.listar(true, Sort.Direction.ASC)).thenReturn(List.of(lista.get(0)));
 
             mockMvc.perform(get("/produto").param("status", "true"))
                     .andExpect(status().isOk())
@@ -338,7 +420,7 @@ class ProdutoControllerTest {
         @Test
         @DisplayName("status=false: repassa o filtro de inativos")
         void soInativos() throws Exception {
-            when(produtoService.listar(false, "ASC")).thenReturn(List.of(lista.get(1)));
+            when(produtoService.listar(false, Sort.Direction.ASC)).thenReturn(List.of(lista.get(1)));
 
             mockMvc.perform(get("/produto").param("status", "false"))
                     .andExpect(status().isOk())
@@ -346,20 +428,20 @@ class ProdutoControllerTest {
         }
 
         @Test
-        @DisplayName("ordem=desc com status: repassa os dois parâmetros")
+        @DisplayName("ordem=DESC com status: converte para Sort.Direction e repassa os dois")
         void ordemDescComStatus() throws Exception {
-            when(produtoService.listar(true, "desc")).thenReturn(List.of(lista.get(0)));
+            when(produtoService.listar(true, Sort.Direction.DESC)).thenReturn(List.of(lista.get(0)));
 
-            mockMvc.perform(get("/produto").param("status", "true").param("ordem", "desc"))
+            mockMvc.perform(get("/produto").param("status", "true").param("ordem", "DESC"))
                     .andExpect(status().isOk());
 
-            verify(produtoService).listar(true, "desc");
+            verify(produtoService).listar(true, Sort.Direction.DESC);
         }
 
         @Test
         @DisplayName("nenhum produto: 200 com lista vazia")
         void vazio() throws Exception {
-            when(produtoService.listar(null, "ASC")).thenReturn(List.of());
+            when(produtoService.listar(null, Sort.Direction.ASC)).thenReturn(List.of());
 
             mockMvc.perform(get("/produto"))
                     .andExpect(status().isOk())
@@ -372,18 +454,18 @@ class ProdutoControllerTest {
             mockMvc.perform(get("/produto").param("status", "abc"))
                     .andExpect(status().isBadRequest());
 
-            verify(produtoService, never()).listar(any(), anyString());
+            verify(produtoService, never()).listar(any(), any());
         }
 
         @Test
-        @Disabled("Ative quando o @RestControllerAdvice converter ordem inválida em 400")
-        @DisplayName("ordem inválida: 400 Bad Request")
+        @DisplayName("ordem inválida: 400 em ProblemDetail, sem chamar o service")
         void ordemInvalida() throws Exception {
-            when(produtoService.listar(null, "xyz"))
-                    .thenThrow(new IllegalArgumentException("Invalid value 'xyz' for orders given"));
-
             mockMvc.perform(get("/produto").param("ordem", "xyz"))
-                    .andExpect(status().isBadRequest());
+                    .andExpect(status().isBadRequest())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                    .andExpect(jsonPath("$.status").value(400));
+
+            verify(produtoService, never()).listar(any(), any());
         }
     }
 }
