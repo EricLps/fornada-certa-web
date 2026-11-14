@@ -2,6 +2,7 @@ package org.ericlps.fornadacerta.handler;
 
 import org.ericlps.fornadacerta.exception.ConflitoException;
 import org.ericlps.fornadacerta.exception.RecursoNaoEncontradoException;
+import org.ericlps.fornadacerta.exception.RegraDeNegocioException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.*;
 import org.springframework.validation.FieldError;
@@ -42,6 +43,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler{
 
         ProblemDetail problema = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
         problema.setTitle("Recurso não encontrado");
+        return problema;
+    }
+
+    @ExceptionHandler(RegraDeNegocioException.class)
+    public ProblemDetail tratarRegraDeNegocio(RegraDeNegocioException ex) {
+
+        ProblemDetail problema = ProblemDetail.forStatusAndDetail(HttpStatusCode.valueOf(422), ex.getMessage());
+        problema.setTitle("Regra de negócio violada");
         return problema;
     }
 
