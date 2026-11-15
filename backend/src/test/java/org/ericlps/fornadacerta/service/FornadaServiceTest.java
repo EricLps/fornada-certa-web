@@ -4,6 +4,7 @@ import org.ericlps.fornadacerta.dto.FornadaItemRequest;
 import org.ericlps.fornadacerta.dto.FornadaLoteRequest;
 import org.ericlps.fornadacerta.dto.FornadaPatchRequest;
 import org.ericlps.fornadacerta.dto.FornadaResponse;
+import org.ericlps.fornadacerta.entity.Fechamento;
 import org.ericlps.fornadacerta.entity.Fornada;
 import org.ericlps.fornadacerta.entity.Produto;
 import org.ericlps.fornadacerta.entity.enums.Turno;
@@ -11,6 +12,7 @@ import org.ericlps.fornadacerta.exception.ConflitoException;
 import org.ericlps.fornadacerta.exception.RecursoNaoEncontradoException;
 import org.ericlps.fornadacerta.exception.RegraDeNegocioException;
 import org.ericlps.fornadacerta.mapper.FornadaMapper;
+import org.ericlps.fornadacerta.repository.FechamentoRepository;
 import org.ericlps.fornadacerta.repository.FornadaRepository;
 import org.ericlps.fornadacerta.repository.ProdutoRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,6 +52,9 @@ class FornadaServiceTest {
     @Mock
     private ProdutoRepository produtoRepository;
 
+    @Mock
+    private FechamentoRepository fechamentoRepository;
+
     @Captor
     private ArgumentCaptor<List<Fornada>> loteCaptor;
 
@@ -58,7 +63,7 @@ class FornadaServiceTest {
     @BeforeEach
     void setUp() {
         // Repositories são mocks (sem banco); o mapper é o real.
-        fornadaService = new FornadaService(fornadaRepository, produtoRepository, new FornadaMapper());
+        fornadaService = new FornadaService(fornadaRepository, produtoRepository, new FornadaMapper(), fechamentoRepository);
     }
 
     private static LocalDate hoje() {
@@ -84,6 +89,15 @@ class FornadaServiceTest {
         fornada.setQtdProduzida(qtd);
         fornada.setPacotesUsados(pacotes);
         return fornada;
+    }
+
+    /** Simula que o dia da fornada já foi fechado com essa sobra e que a produção somada do dia é essa. */
+    private void diaFechado(Fornada fornada, int sobra, long producaoDoDia) {
+        Fechamento fechamento = new Fechamento();
+        fechamento.setQtdSobra(sobra);
+        UUID produtoId = fornada.getProduto().getId();
+        when(fechamentoRepository.findByDataAndProdutoId(fornada.getData(), produtoId)).thenReturn(Optional.of(fechamento));
+        when(fornadaRepository.somarProducaoDoDia(produtoId, fornada.getData())).thenReturn(producaoDoDia);
     }
 
     /** Faz o saveAll devolver a própria lista, com ids gerados, como o banco faria. */
@@ -371,6 +385,64 @@ class FornadaServiceTest {
         }
 
         @Test
+        @DisplayName("dia já fechado: reduzir a quantidade é permitido se o total continua acima da sobra")
+        void diaFechadoReducaoPermitida() {
+            when(fornadaRepository.findById(existente.getId())).thenReturn(Optional.of(existente));
+            diaFechado(existente, 30, 250);
+
+            fornadaService.atualizarParcialmente(existente.getId(), new FornadaPatchRequest(100, null));
+
+            assertThat(existente.getQtdProduzida()).isEqualTo(100);
+        }
+
+        @Test
+        @DisplayName("dia já fechado: reduzir abaixo da sobra é bloqueado com 422 e a fornada não muda")
+        void diaFechadoReducaoBloqueada() {
+            when(fornadaRepository.findById(existente.getId())).thenReturn(Optional.of(existente));
+            diaFechado(existente, 30, 250);
+
+            assertThatThrownBy(() -> fornadaService.atualizarParcialmente(existente.getId(), new FornadaPatchRequest(20, null)))
+                    .isInstanceOf(RegraDeNegocioException.class)
+                    .hasMessageContaining("sobra de 30")
+                    .hasMessageContaining("ficaria em 20");
+
+            assertThat(existente.getQtdProduzida()).isEqualTo(250);
+        }
+
+        @Test
+        @DisplayName("dia já fechado: outras fornadas do dia contam no total (manhã + tarde)")
+        void diaFechadoOutrasFornadasCompensam() {
+            when(fornadaRepository.findById(existente.getId())).thenReturn(Optional.of(existente));
+            // 250 desta fornada + 150 da outra = 400 no dia; baixando esta para 5, o dia fica com 155
+            diaFechado(existente, 100, 400);
+
+            fornadaService.atualizarParcialmente(existente.getId(), new FornadaPatchRequest(5, null));
+
+            assertThat(existente.getQtdProduzida()).isEqualTo(5);
+        }
+
+        @Test
+        @DisplayName("dia já fechado: total exatamente igual à sobra é permitido")
+        void diaFechadoTotalIgualASobra() {
+            when(fornadaRepository.findById(existente.getId())).thenReturn(Optional.of(existente));
+            diaFechado(existente, 30, 250);
+
+            fornadaService.atualizarParcialmente(existente.getId(), new FornadaPatchRequest(30, null));
+
+            assertThat(existente.getQtdProduzida()).isEqualTo(30);
+        }
+
+        @Test
+        @DisplayName("mudar só os pacotes nem consulta o fechamento")
+        void soPacotesNaoConsultaFechamento() {
+            when(fornadaRepository.findById(existente.getId())).thenReturn(Optional.of(existente));
+
+            fornadaService.atualizarParcialmente(existente.getId(), new FornadaPatchRequest(null, 5));
+
+            verifyNoInteractions(fechamentoRepository);
+        }
+
+        @Test
         @DisplayName("fornada inexistente: RecursoNaoEncontradoException")
         void inexistente() {
             UUID id = UUID.randomUUID();
@@ -392,6 +464,32 @@ class FornadaServiceTest {
         void existente() {
             Fornada fornada = fornada(produto("Sonho", true), hoje(), Turno.TARDE, 40, null);
             when(fornadaRepository.findById(fornada.getId())).thenReturn(Optional.of(fornada));
+
+            fornadaService.excluir(fornada.getId());
+
+            verify(fornadaRepository).delete(fornada);
+        }
+
+        @Test
+        @DisplayName("dia já fechado: excluir a única fornada deixaria a produção abaixo da sobra, 422")
+        void diaFechadoExclusaoBloqueada() {
+            Fornada fornada = fornada(produto("Pão francês", true), hoje(), Turno.MANHA, 250, null);
+            when(fornadaRepository.findById(fornada.getId())).thenReturn(Optional.of(fornada));
+            diaFechado(fornada, 30, 250);
+
+            assertThatThrownBy(() -> fornadaService.excluir(fornada.getId()))
+                    .isInstanceOf(RegraDeNegocioException.class)
+                    .hasMessageContaining("ficaria em 0");
+
+            verify(fornadaRepository, never()).delete(any());
+        }
+
+        @Test
+        @DisplayName("dia já fechado: excluir é permitido se as outras fornadas cobrem a sobra")
+        void diaFechadoExclusaoPermitida() {
+            Fornada fornada = fornada(produto("Pão francês", true), hoje(), Turno.TARDE, 100, null);
+            when(fornadaRepository.findById(fornada.getId())).thenReturn(Optional.of(fornada));
+            diaFechado(fornada, 30, 350);
 
             fornadaService.excluir(fornada.getId());
 

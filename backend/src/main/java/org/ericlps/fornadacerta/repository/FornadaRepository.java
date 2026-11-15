@@ -6,6 +6,8 @@ import org.ericlps.fornadacerta.entity.enums.Turno;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
@@ -22,5 +24,12 @@ public interface FornadaRepository extends JpaRepository<Fornada, UUID> {
 
     @EntityGraph(attributePaths = "produto")
     List<Fornada> findByDataAndTurno(LocalDate data, Turno turno, Sort sort);
+
+    @Query("""
+            SELECT COALESCE(SUM(f.qtdProduzida), 0)
+            FROM Fornada f
+            WHERE f.produto.id = :produtoId AND f.data = :data
+            """)
+    long somarProducaoDoDia(@Param("produtoId") UUID produtoId, @Param("data") LocalDate data);
 
 }

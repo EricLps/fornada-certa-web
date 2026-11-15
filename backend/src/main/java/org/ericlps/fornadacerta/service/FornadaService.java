@@ -12,6 +12,7 @@ import org.ericlps.fornadacerta.exception.ConflitoException;
 import org.ericlps.fornadacerta.exception.RecursoNaoEncontradoException;
 import org.ericlps.fornadacerta.exception.RegraDeNegocioException;
 import org.ericlps.fornadacerta.mapper.FornadaMapper;
+import org.ericlps.fornadacerta.repository.FechamentoRepository;
 import org.ericlps.fornadacerta.repository.FornadaRepository;
 import org.ericlps.fornadacerta.repository.ProdutoRepository;
 import org.springframework.data.domain.Sort;
@@ -33,6 +34,7 @@ public class FornadaService {
     private final FornadaRepository fornadaRepository;
     private final ProdutoRepository produtoRepository;
     private final FornadaMapper fornadaMapper;
+    private final FechamentoRepository fechamentoRepository;
 
     @Transactional
     public List<FornadaResponse> registrarLote(FornadaLoteRequest request) {
@@ -102,6 +104,7 @@ public class FornadaService {
 
         if(request.qtdProduzida() != null){
 
+            validarContraFechamento(fornada, request.qtdProduzida());
             fornada.setQtdProduzida(request.qtdProduzida());
 
         }
@@ -119,8 +122,33 @@ public class FornadaService {
     @Transactional
     public void excluir(UUID id){
 
-        fornadaRepository.delete(buscar(id));
+        Fornada fornada = buscar(id);
 
+        validarContraFechamento(fornada, 0);
+        fornadaRepository.delete(fornada);
+
+    }
+
+    /**
+     * Se o dia já foi fechado, a produção total não pode ficar abaixo da sobra registrada.
+     * Precisa rodar ANTES de alterar a fornada: a consulta de soma faz o Hibernate gravar
+     * as mudanças pendentes, e aí a soma já viria com o valor novo.
+     */
+    private void validarContraFechamento(Fornada fornada, int novaQtdProduzida){
+
+        UUID produtoId = fornada.getProduto().getId();
+
+        fechamentoRepository.findByDataAndProdutoId(fornada.getData(), produtoId).ifPresent(fechamento -> {
+
+            long totalAtual = fornadaRepository.somarProducaoDoDia(produtoId, fornada.getData());
+            long totalNovo = totalAtual - fornada.getQtdProduzida() + novaQtdProduzida;
+
+            if (totalNovo < fechamento.getQtdSobra()) {
+                throw new RegraDeNegocioException("O dia " + fornada.getData() + " já foi fechado com sobra de "
+                        + fechamento.getQtdSobra() + " para " + fornada.getProduto().getNome()
+                        + "; a produção do dia ficaria em " + totalNovo + ". Corrija o fechamento antes.");
+            }
+        });
     }
 
     private Fornada buscar(UUID id){
