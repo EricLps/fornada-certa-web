@@ -2,6 +2,7 @@ package org.ericlps.fornadacerta.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.ericlps.fornadacerta.dto.ProdutoDetalheResponse;
 import org.ericlps.fornadacerta.dto.ProdutoPatchRequest;
 import org.ericlps.fornadacerta.dto.ProdutoRequest;
 import org.ericlps.fornadacerta.dto.ProdutoResponse;
@@ -27,6 +28,13 @@ public class ProdutoController {
         ProdutoResponse response = produtoService.cadastrarProduto(request);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<ProdutoDetalheResponse> detalhar(@PathVariable UUID id){
+
+        return ResponseEntity.ok(produtoService.detalhar(id));
 
     }
 

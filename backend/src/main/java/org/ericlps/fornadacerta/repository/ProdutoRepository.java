@@ -3,6 +3,8 @@ package org.ericlps.fornadacerta.repository;
 import org.ericlps.fornadacerta.entity.Produto;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -20,5 +22,8 @@ public interface ProdutoRepository extends JpaRepository<Produto, UUID> {
     boolean existsByNomeIgnoreCase(String nome);
 
     boolean existsByNomeIgnoreCaseAndIdNot(String nome, UUID id);
+
+    @Query("SELECT DISTINCT i.produto FROM ItemReceita i WHERE i.insumo.id = :insumoId")
+    List<Produto> findUsandoInsumo(@Param("insumoId") UUID insumoId);
 
 }

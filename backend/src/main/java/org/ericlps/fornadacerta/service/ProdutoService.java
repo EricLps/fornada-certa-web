@@ -1,12 +1,14 @@
 package org.ericlps.fornadacerta.service;
 
 import lombok.RequiredArgsConstructor;
+import org.ericlps.fornadacerta.dto.ProdutoDetalheResponse;
 import org.ericlps.fornadacerta.dto.ProdutoPatchRequest;
 import org.ericlps.fornadacerta.dto.ProdutoRequest;
 import org.ericlps.fornadacerta.dto.ProdutoResponse;
 import org.ericlps.fornadacerta.entity.Produto;
 import org.ericlps.fornadacerta.exception.ConflitoException;
 import org.ericlps.fornadacerta.exception.RecursoNaoEncontradoException;
+import org.ericlps.fornadacerta.exception.RegraDeNegocioException;
 import org.ericlps.fornadacerta.mapper.ProdutoMapper;
 import org.ericlps.fornadacerta.repository.ProdutoRepository;
 import org.springframework.data.domain.Sort;
@@ -22,26 +24,31 @@ public class ProdutoService {
 
     private final ProdutoRepository produtoRepository;
     private final ProdutoMapper produtoMapper;
+    private final FichaTecnicaService fichaTecnicaService;
 
+    @Transactional
     public ProdutoResponse cadastrarProduto(ProdutoRequest request) {
 
         if (produtoRepository.existsByNomeIgnoreCase(request.nome())) {
-
             throw new ConflitoException("Já existe um produto cadastrado como: " + request.nome());
-
-        } else {
-
-            Produto produto = produtoMapper.toEntity(request);
-            Produto salvo = produtoRepository.save(produto);
-            return produtoMapper.toResponse(salvo);
         }
 
+        Produto produto = produtoMapper.toEntity(request);
+        fichaTecnicaService.aplicar(produto, request.origem(), request.rendimento(), request.itens());
+
+        return produtoMapper.toResponse(produtoRepository.save(produto));
+    }
+
+    @Transactional(readOnly = true)
+    public ProdutoDetalheResponse detalhar(UUID id) {
+
+        return produtoMapper.toDetalhe(buscar(id));
     }
 
     @Transactional
     public ProdutoResponse atualizarParcialmente(UUID id, ProdutoPatchRequest request) {
 
-        Produto produto = produtoRepository.findById(id).orElseThrow(() -> new RecursoNaoEncontradoException("Produto não encontrado"));
+        Produto produto = buscar(id);
 
         if (request.nome() != null) {
 
@@ -58,23 +65,25 @@ public class ProdutoService {
 
         }
 
-        if(request.custo() != null){
-
-            produto.setCusto(request.custo());
-
-        }
-
         if (request.status() != null) {
 
             produto.setStatus(request.status());
 
         }
 
+        if (request.alteraFichaTecnica()) {
+
+            if (!request.fichaTecnicaCompleta()) {
+                throw new RegraDeNegocioException("Para alterar a ficha técnica, envie origem, rendimento e itens juntos.");
+            }
+
+            fichaTecnicaService.aplicar(produto, request.origem(), request.rendimento(), request.itens());
+
+        }
+
         return produtoMapper.toResponse(produto);
 
-
     }
-
 
     public List<ProdutoResponse> listar(Boolean status, Sort.Direction ordem) {
 
@@ -85,6 +94,12 @@ public class ProdutoService {
                 : produtoRepository.findByStatus(status, sort);
 
         return produtoMapper.toResponseList(produtos);
+
+    }
+
+    private Produto buscar(UUID id) {
+
+        return produtoRepository.findById(id).orElseThrow(() -> new RecursoNaoEncontradoException("Produto não encontrado"));
 
     }
 
