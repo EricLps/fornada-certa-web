@@ -21,5 +21,6 @@ public interface FechamentoRepository extends JpaRepository<Fechamento, UUID> {
     @EntityGraph(attributePaths = "produto")
     List<Fechamento> findByData(LocalDate data, Sort sort);
 
+    @EntityGraph(attributePaths = "produto")
     List<Fechamento> findByDataBetween(LocalDate inicio, LocalDate fim);
 }
