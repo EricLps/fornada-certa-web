@@ -5,6 +5,112 @@
   </div>
 </header>
 
-<section class="card">
-  <p class="vazio">Tela em construção.</p>
+<section class="card filtros" aria-label="Data e turno">
+  <div class="campo">
+    <label for="data">Data em que o pão vai para a prateleira</label>
+    <input id="data" type="date" [max]="amanha" [value]="data()" (change)="mudarData($any($event.target).value)">
+  </div>
+  <div class="campo">
+    <span class="rotulo">Turno</span>
+    <div class="abas" role="group" aria-label="Turno">
+      @for (t of turnos; track t.valor) {
+        <button type="button" class="aba" [attr.aria-pressed]="turno() === t.valor" (click)="mudarTurno(t.valor)">{{ t.rotulo }}</button>
+      }
+    </div>
+  </div>
 </section>
+
+@if (erro()) {
+  <div class="alerta alerta-erro" role="alert">{{ erro() }}</div>
+}
+@if (sucesso()) {
+  <div class="alerta alerta-sucesso" role="status">{{ sucesso() }}</div>
+}
+
+<div class="grade">
+  <section class="card tabela-card" aria-labelledby="titulo-tabela">
+    <div class="tabela-topo">
+      <div>
+        <h2 id="titulo-tabela">O que vai ao forno</h2>
+        <p class="eyebrow">{{ data() | date:'EEEE, d \'de\' MMMM' }}. Só aparecem os produtos ativos.</p>
+      </div>
+      <button type="button" class="btn btn-secundario" (click)="aplicarSugestoes()" [disabled]="carregando()">Aplicar sugestões</button>
+    </div>
+
+    @if (carregando()) {
+      <p class="vazio">Carregando...</p>
+    } @else {
+      <div class="rolagem">
+        <table class="tabela">
+          <thead>
+            <tr>
+              <th scope="col">Produto</th>
+              <th scope="col">Sugestão</th>
+              <th scope="col">Quantidade</th>
+              <th scope="col">Pacotes</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (linha of linhas(); track linha.produto.id) {
+              <tr [class.lancada]="linha.lancadaNoTurno !== null">
+                <td>
+                  <span class="nome">{{ linha.produto.nome }}</span>
+                  @if (linha.aviso) {
+                    <span class="nota">{{ linha.aviso }}</span>
+                  }
+                  @if (linha.erro) {
+                    <span class="nota erro">{{ linha.erro }}</span>
+                  }
+                </td>
+                <td>
+                  @if (restante(linha) !== null) {
+                    <span class="sugestao">{{ restante(linha) }}</span>
+                    @if (linha.produzidoNoDia > 0) {
+                      <span class="nota">{{ linha.sugestaoDoDia }} no dia · {{ linha.produzidoNoDia }} já assados</span>
+                    }
+                  } @else {
+                    <span class="nota">sem histórico</span>
+                  }
+                </td>
+                <td>
+                  @if (linha.lancadaNoTurno !== null) {
+                    <span class="selo">Lançada: {{ linha.lancadaNoTurno }}</span>
+                  } @else {
+                    <input type="number" min="0" step="1" class="qtd"
+                           [attr.aria-label]="'Quantidade de ' + linha.produto.nome"
+                           [value]="linha.quantidade ?? ''"
+                           (input)="definirQuantidade(linha.produto.id, $any($event.target).valueAsNumber)">
+                  }
+                </td>
+                <td>
+                  @if (linha.lancadaNoTurno === null) {
+                    <input type="number" min="1" step="1" class="qtd pequeno"
+                           [attr.aria-label]="'Pacotes usados de ' + linha.produto.nome"
+                           [value]="linha.pacotes ?? ''"
+                           (input)="definirPacotes(linha.produto.id, $any($event.target).valueAsNumber)">
+                  }
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="4" class="vazio">Nenhum produto ativo. Cadastre na tela de Produtos.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+
+  <aside class="card resumo" aria-labelledby="titulo-resumo">
+    <h2 id="titulo-resumo">Resumo</h2>
+    <dl>
+      <div><dt>Total de itens</dt><dd>{{ totalItens() }}</dd></div>
+      <div><dt>Total sugerido</dt><dd class="sugestao">{{ totalSugerido() }}</dd></div>
+      <div><dt>Custo de produção</dt><dd>{{ custoTotal() | currency:'BRL' }}</dd></div>
+      <div><dt>Receita se vender tudo</dt><dd>{{ receitaTotal() | currency:'BRL' }}</dd></div>
+    </dl>
+    <button type="button" class="btn btn-primario" (click)="registrar()" [disabled]="salvando() || carregando()">
+      {{ salvando() ? 'Registrando...' : 'Registrar fornada' }}
+    </button>
+    <p class="nota">A sugestão é a média de vendas do mesmo dia da semana nas últimas 4 semanas, mais 10% de margem, descontando o que já foi assado no dia.</p>
+  </aside>
+</div>
