@@ -167,8 +167,29 @@ a {
   color: var(--erro);
 }
 
-.campo input.invalido {
+.campo input.invalido,
+.campo select.invalido {
   border-color: var(--erro);
+}
+
+.btn-icone {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--superficie);
+  color: var(--texto-secundario);
+  cursor: pointer;
+}
+
+.btn-icone:hover {
+  background: var(--acento-fundo);
+  border-color: var(--acento-fundo);
+  color: var(--acento-hover);
 }
 
 .abas {

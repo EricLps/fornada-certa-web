@@ -1,0 +1,124 @@
+<header class="page-header">
+  <div>
+    <p class="eyebrow">{{ visiveis().length }} insumo(s) nesta lista</p>
+    <h1>Insumos</h1>
+  </div>
+  @if (modo() !== 'novo') {
+    <button type="button" class="btn btn-primario" (click)="novo()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+      Novo insumo
+    </button>
+  }
+</header>
+
+@if (erro() && modo() === 'fechado') {
+  <div class="alerta alerta-erro" role="alert">{{ erro() }}</div>
+}
+@if (sucesso()) {
+  <div class="alerta alerta-sucesso" role="status">{{ sucesso() }}</div>
+}
+
+<div class="grade">
+  <section class="card lista" aria-label="Lista de insumos">
+    <div class="campo">
+      <label for="busca">Buscar insumo</label>
+      <input id="busca" type="search" placeholder="Digite o nome" [value]="busca()" (input)="busca.set($any($event.target).value)">
+    </div>
+
+    <div class="abas" role="group" aria-label="Filtrar por tipo">
+      @for (f of filtros; track f.valor) {
+        <button type="button" class="aba" [attr.aria-pressed]="filtro() === f.valor" (click)="filtro.set(f.valor)">
+          {{ f.rotulo }}
+        </button>
+      }
+    </div>
+
+    @if (carregando()) {
+      <p class="vazio">Carregando...</p>
+    } @else {
+      <ul class="itens">
+        @for (i of visiveis(); track i.id) {
+          <li class="item" [class.selecionado]="selecionado()?.id === i.id">
+            <div class="item-info">
+              <span class="item-nome">{{ i.nome }}</span>
+              <span class="item-detalhe">{{ i.custoUnitario | currency:'BRL' }} por {{ sigla(i.unidade) }}</span>
+            </div>
+            <button type="button" class="btn-icone" [attr.aria-label]="'Editar ' + i.nome" title="Editar" (click)="editar(i)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"></path><path d="M13.5 8.5l3 3"></path></svg>
+            </button>
+          </li>
+        } @empty {
+          <li class="vazio">Nenhum insumo encontrado.</li>
+        }
+      </ul>
+    }
+  </section>
+
+  @if (modo() !== 'fechado') {
+    <section class="card formulario" aria-labelledby="titulo-form">
+      <div class="form-topo">
+        <div>
+          <p class="eyebrow">{{ modo() === 'editando' ? 'Editando' : 'Cadastro' }}</p>
+          <h2 id="titulo-form">{{ selecionado()?.nome ?? 'Novo insumo' }}</h2>
+        </div>
+        <button type="button" class="btn-icone" aria-label="Fechar" title="Fechar" (click)="fechar()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+        </button>
+      </div>
+
+      @if (erro()) {
+        <div class="alerta alerta-erro" role="alert">{{ erro() }}</div>
+      }
+
+      @if (modo() === 'editando') {
+        <div class="alerta alerta-aviso">
+          Ao mudar o custo, o custo dos produtos que usam este insumo é recalculado. Os fechamentos já feitos não mudam.
+        </div>
+      }
+
+      <form [formGroup]="form" (ngSubmit)="salvar()" novalidate>
+        <div class="campo">
+          <label for="nome">Nome do insumo</label>
+          <input id="nome" type="text" formControlName="nome" placeholder="Ex.: Farinha de trigo" [class.invalido]="erroDoCampo('nome')">
+          @if (erroDoCampo('nome'); as msg) {
+            <span class="erro-campo">{{ msg }}</span>
+          }
+        </div>
+
+        <div class="linha">
+          <div class="campo">
+            <label for="unidade">Unidade de compra</label>
+            <select id="unidade" formControlName="unidade" [class.invalido]="erroDoCampo('unidade')">
+              <option [ngValue]="null" disabled>Escolha</option>
+              @for (u of unidades; track u.valor) {
+                <option [ngValue]="u.valor">{{ u.rotulo }}</option>
+              }
+            </select>
+            @if (erroDoCampo('unidade'); as msg) {
+              <span class="erro-campo">{{ msg }}</span>
+            }
+          </div>
+
+          <div class="campo">
+            <label for="custo">{{ rotuloDoCusto() }}</label>
+            <input id="custo" type="number" step="0.01" min="0" formControlName="custoUnitario" [class.invalido]="erroDoCampo('custoUnitario')">
+            @if (erroDoCampo('custoUnitario'); as msg) {
+              <span class="erro-campo">{{ msg }}</span>
+            }
+          </div>
+        </div>
+
+        @if (form.controls.unidade.value === 'SACO') {
+          <p class="dica">Saco é a massa pronta comprada do fornecedor. Quantos itens cada saco rende você informa no produto.</p>
+        }
+
+        <div class="acoes">
+          <button type="button" class="btn btn-secundario" (click)="fechar()">Cancelar</button>
+          <button type="submit" class="btn btn-primario" [disabled]="salvando()">
+            {{ salvando() ? 'Salvando...' : (modo() === 'editando' ? 'Salvar alterações' : 'Cadastrar insumo') }}
+          </button>
+        </div>
+      </form>
+    </section>
+  }
+</div>

@@ -6,5 +6,6 @@ export const routes: Routes = [
   { path: 'fornada', title: 'Fornada do dia · Fornada Certa', loadComponent: () => import('./pages/fornada/fornada').then(m => m.Fornada) },
   { path: 'fechamento', title: 'Fechamento do dia · Fornada Certa', loadComponent: () => import('./pages/fechamento/fechamento').then(m => m.Fechamento) },
   { path: 'produtos', title: 'Produtos · Fornada Certa', loadComponent: () => import('./pages/produtos/produtos').then(m => m.Produtos) },
+  { path: 'insumos', title: 'Insumos · Fornada Certa', loadComponent: () => import('./pages/insumos/insumos').then(m => m.Insumos) },
   { path: '**', redirectTo: 'painel' },
 ];
