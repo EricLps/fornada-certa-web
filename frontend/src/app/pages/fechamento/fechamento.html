@@ -5,6 +5,116 @@
   </div>
 </header>
 
-<section class="card">
-  <p class="vazio">Tela em construção.</p>
+<section class="card filtros" aria-label="Data">
+  <div class="campo">
+    <label for="data">Dia que está sendo fechado</label>
+    <input id="data" type="date" [max]="hoje" [value]="data()" (change)="mudarData($any($event.target).value)">
+  </div>
+  <p class="nota">Informe quanto sobrou de cada produto. Doado e reaproveitado não contam como desperdício; o resto vai para o descarte.</p>
 </section>
+
+@if (erro()) {
+  <div class="alerta alerta-erro" role="alert">{{ erro() }}</div>
+}
+@if (sucesso()) {
+  <div class="alerta alerta-sucesso" role="status">{{ sucesso() }}</div>
+}
+
+<div class="grade">
+  <section class="card tabela-card" aria-labelledby="titulo-tabela">
+    <div>
+      <h2 id="titulo-tabela">Sobras de {{ data() | date:'EEEE, d \'de\' MMMM' }}</h2>
+      <p class="eyebrow">Aparecem os produtos que tiveram fornada neste dia.</p>
+    </div>
+
+    @if (carregando()) {
+      <p class="vazio">Carregando...</p>
+    } @else {
+      <div class="rolagem">
+        <table class="tabela">
+          <thead>
+            <tr>
+              <th scope="col">Produto</th>
+              <th scope="col">Produzido</th>
+              <th scope="col">Sobra</th>
+              <th scope="col">Doada</th>
+              <th scope="col">Reaproveitada</th>
+              <th scope="col">Esgotou às</th>
+              <th scope="col">Descarte</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (linha of linhas(); track linha.produtoId) {
+              <tr [class.fechada]="linha.fechado">
+                <td>
+                  <span class="nome">{{ linha.nome }}</span>
+                  @if (linha.fechado) {
+                    <span class="selo">Fechado</span>
+                  }
+                  @if (linha.erro) {
+                    <span class="nota erro">{{ linha.erro }}</span>
+                  }
+                </td>
+                <td>{{ linha.produzido }}</td>
+                @if (linha.fechado; as f) {
+                  <td>{{ f.qtdSobra }}</td>
+                  <td>{{ f.qtdDoada }}</td>
+                  <td>{{ f.qtdReaproveitada }}</td>
+                  <td>{{ f.horarioEsgotou ? f.horarioEsgotou.substring(0, 5) : '—' }}</td>
+                } @else {
+                  <td>
+                    <input type="number" min="0" class="qtd" [attr.aria-label]="'Sobra de ' + linha.nome"
+                           [value]="linha.sobra ?? ''"
+                           (input)="definir(linha.produtoId, 'sobra', $any($event.target).valueAsNumber)">
+                  </td>
+                  <td>
+                    <input type="number" min="0" class="qtd" [attr.aria-label]="'Doada de ' + linha.nome"
+                           [value]="linha.doada ?? ''"
+                           (input)="definir(linha.produtoId, 'doada', $any($event.target).valueAsNumber)">
+                  </td>
+                  <td>
+                    <input type="number" min="0" class="qtd" [attr.aria-label]="'Reaproveitada de ' + linha.nome"
+                           [value]="linha.reaproveitada ?? ''"
+                           (input)="definir(linha.produtoId, 'reaproveitada', $any($event.target).valueAsNumber)">
+                  </td>
+                  <td>
+                    <input type="time" class="qtd" [attr.aria-label]="'Horário em que ' + linha.nome + ' esgotou'"
+                           [disabled]="linha.sobra !== 0"
+                           [value]="linha.esgotou ?? ''"
+                           (change)="definirEsgotou(linha.produtoId, $any($event.target).value)">
+                  </td>
+                }
+                <td>
+                  @if (descarte(linha) !== null) {
+                    <span class="descarte" [class.zero]="descarte(linha) === 0">{{ descarte(linha) }}</span>
+                  } @else {
+                    —
+                  }
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="7" class="vazio">Nenhuma fornada lançada neste dia.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+
+  <aside class="card resumo" aria-labelledby="titulo-resumo">
+    <h2 id="titulo-resumo">Resumo do dia</h2>
+    <dl>
+      <div><dt>Produzido</dt><dd>{{ resumo().produzido }}</dd></div>
+      <div><dt>Vendido</dt><dd>{{ resumo().vendido }}</dd></div>
+      <div><dt>Sobra</dt><dd>{{ resumo().sobra }}</dd></div>
+      <div><dt>Descartado</dt><dd>{{ resumo().descartado }}</dd></div>
+      <div><dt>Taxa de desperdício</dt><dd>{{ resumo().taxa | percent:'1.1-1' }}</dd></div>
+      <div class="destaque"><dt>Custo do desperdício</dt><dd>{{ resumo().custo | currency:'BRL' }}</dd></div>
+    </dl>
+    <button type="button" class="btn btn-primario" (click)="fecharDia()"
+            [disabled]="salvando() || carregando() || pendentes().length === 0">
+      {{ salvando() ? 'Fechando...' : 'Fechar o dia' }}
+    </button>
+    <p class="nota">O resumo considera os produtos já fechados e os que você está preenchendo agora.</p>
+  </aside>
+</div>

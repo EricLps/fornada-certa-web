@@ -1,0 +1,114 @@
+.filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  align-items: flex-end;
+}
+
+.grade {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.tabela-card {
+  flex: 3 1 640px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.rolagem {
+  overflow-x: auto;
+}
+
+.nome {
+  font-weight: 600;
+}
+
+.nota {
+  display: block;
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--texto-suave);
+}
+
+.nota.erro {
+  color: var(--erro);
+}
+
+.qtd {
+  width: 90px;
+  min-height: 40px;
+  padding: 0 8px;
+  border: 1px solid var(--borda-forte);
+  border-radius: var(--raio);
+}
+
+.qtd:disabled {
+  background: var(--superficie-suave);
+}
+
+.selo {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--sucesso-fundo);
+  color: var(--sucesso);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+tr.fechada td {
+  background: var(--superficie-suave);
+}
+
+.descarte {
+  font-weight: 600;
+  color: var(--erro);
+}
+
+.descarte.zero {
+  color: var(--sucesso);
+}
+
+.resumo {
+  flex: 1 1 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+dl {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+dt {
+  color: var(--texto-suave);
+}
+
+dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.destaque {
+  padding-top: 10px;
+  border-top: 1px solid var(--borda);
+}
+
+.destaque dd {
+  color: var(--erro);
+  font-size: 18px;
+}
