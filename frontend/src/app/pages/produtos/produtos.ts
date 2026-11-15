@@ -7,9 +7,11 @@ import { tratarErroApi } from '../../services/erro-api';
 import { ProdutoService } from '../../services/produto.service';
 
 type Filtro = 'ativos' | 'inativos' | 'todos';
+type Modo = 'fechado' | 'novo' | 'editando';
 
 @Component({
   selector: 'app-produtos',
+  host: { class: 'pagina' },
   imports: [ReactiveFormsModule, CurrencyPipe],
   templateUrl: './produtos.html',
   styleUrl: './produtos.css',
@@ -26,6 +28,7 @@ export class Produtos implements OnInit {
   ];
 
   readonly filtro = signal<Filtro>('ativos');
+  readonly modo = signal<Modo>('fechado');
   readonly produtos = signal<Produto[]>([]);
   readonly busca = signal('');
   readonly selecionado = signal<Produto | null>(null);
@@ -75,12 +78,22 @@ export class Produtos implements OnInit {
     this.selecionado.set(null);
     this.form.reset();
     this.limparMensagens();
+    this.modo.set('novo');
   }
 
   editar(produto: Produto): void {
     this.selecionado.set(produto);
     this.form.setValue({ nome: produto.nome, preco: produto.preco, custo: produto.custo });
     this.limparMensagens();
+    this.modo.set('editando');
+  }
+
+  fechar(): void {
+    this.selecionado.set(null);
+    this.form.reset();
+    this.errosCampo.set({});
+    this.erro.set(null);
+    this.modo.set('fechado');
   }
 
   salvar(): void {
@@ -101,8 +114,8 @@ export class Produtos implements OnInit {
     requisicao.subscribe({
       next: produto => {
         this.salvando.set(false);
-        this.sucesso.set(atual ? 'Alterações salvas.' : `${produto.nome} cadastrado.`);
-        this.selecionado.set(produto);
+        this.fechar();
+        this.sucesso.set(atual ? `Alterações em ${produto.nome} salvas.` : `${produto.nome} cadastrado.`);
         this.carregar();
       },
       error: (e: HttpErrorResponse) => {
