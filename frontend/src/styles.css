@@ -1,1 +1,263 @@
-/* You can add global styles to this file, and also import other style files */
+:root {
+  --fundo: #F4F2EE;
+  --superficie: #FFFFFF;
+  --superficie-suave: #F7F5F1;
+  --borda: #E4DFD6;
+  --borda-forte: #D9D3C9;
+
+  --texto: #1D1B18;
+  --texto-secundario: #4A453E;
+  --texto-suave: #5F5A52;
+
+  --acento: #B84A0E;
+  --acento-hover: #8F3A0B;
+  --acento-fundo: #FBEBDD;
+
+  --sugestao: #2B5FD9;
+  --sugestao-fundo: #E8EEFB;
+  --sucesso: #2E6B3C;
+  --sucesso-fundo: #E6F2E8;
+  --alerta-fundo: #FFF3D6;
+  --erro: #A1261B;
+  --erro-fundo: #FDECEA;
+
+  --fonte-titulo: 'Bricolage Grotesque', sans-serif;
+  --fonte-corpo: 'Inter', system-ui, sans-serif;
+
+  --raio: 10px;
+  --raio-card: 16px;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--fundo);
+  color: var(--texto);
+  font-family: var(--fonte-corpo);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+h1, h2, h3 {
+  margin: 0;
+  font-family: var(--fonte-titulo);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+h1 { font-size: 34px; }
+h2 { font-size: 22px; }
+h3 { font-size: 16px; }
+
+button, input, select, textarea {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--acento);
+}
+
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--texto-suave);
+}
+
+.card {
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-card);
+  padding: 24px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 20px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primario {
+  background: var(--acento);
+  color: #FFFFFF;
+}
+
+.btn-primario:hover:not(:disabled) {
+  background: var(--acento-hover);
+}
+
+.btn-secundario {
+  background: var(--superficie);
+  border-color: var(--borda-forte);
+  color: var(--texto);
+}
+
+.btn-secundario:hover:not(:disabled) {
+  background: var(--superficie-suave);
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.campo label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--texto-secundario);
+}
+
+.campo input,
+.campo select {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--borda-forte);
+  border-radius: var(--raio);
+  background: var(--superficie);
+  font-size: 14px;
+}
+
+.campo input:focus,
+.campo select:focus {
+  outline: 2px solid var(--acento);
+  outline-offset: 1px;
+}
+
+.campo .erro-campo {
+  font-size: 12px;
+  color: var(--erro);
+}
+
+.campo input.invalido {
+  border-color: var(--erro);
+}
+
+.abas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.aba {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--borda-forte);
+  border-radius: 999px;
+  background: var(--superficie);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.aba[aria-pressed="true"] {
+  background: var(--texto);
+  border-color: var(--texto);
+  color: #FFFFFF;
+}
+
+.switch {
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--borda-forte);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s;
+}
+
+.switch[aria-checked="true"] {
+  background: var(--sucesso);
+}
+
+.switch[aria-checked="true"]::after {
+  transform: translateX(18px);
+}
+
+.alerta {
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.alerta-erro {
+  background: var(--erro-fundo);
+  color: var(--erro);
+}
+
+.alerta-sucesso {
+  background: var(--sucesso-fundo);
+  color: var(--sucesso);
+}
+
+.alerta-aviso {
+  background: var(--alerta-fundo);
+  color: var(--texto-secundario);
+}
+
+.tabela {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tabela th {
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--texto-suave);
+  border-bottom: 1px solid var(--borda);
+}
+
+.tabela td {
+  padding: 12px;
+  border-bottom: 1px solid var(--borda);
+}
+
+.vazio {
+  padding: 24px 0;
+  text-align: center;
+  color: var(--texto-suave);
+}

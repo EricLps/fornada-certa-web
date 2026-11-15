@@ -1,0 +1,72 @@
+.layout {
+  display: flex;
+  flex-wrap: wrap;
+  min-height: 100vh;
+}
+
+.sidebar {
+  flex: 1 1 220px;
+  max-width: 100%;
+  padding: 24px 16px;
+  background: var(--superficie);
+  border-right: 1px solid var(--borda);
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.marca {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px;
+  font-family: var(--fonte-titulo);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.menu a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: var(--raio);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--texto-secundario);
+  text-decoration: none;
+}
+
+.menu a:hover {
+  background: #ECE8E1;
+  color: var(--texto);
+}
+
+.menu a.ativo {
+  background: var(--acento-fundo);
+  color: var(--acento-hover);
+  font-weight: 600;
+}
+
+.conteudo {
+  flex: 999 1 560px;
+  min-width: 0;
+  padding: 32px 40px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+@media (max-width: 700px) {
+  .conteudo {
+    padding: 24px 16px 40px;
+  }
+}
