@@ -30,7 +30,6 @@ public class FornadaService {
     private static final ZoneId FUSO = ZoneId.of("America/Sao_Paulo");
     private static final Sort POR_NOME_DO_PRODUTO = Sort.by("produto.nome");
 
-
     private final FornadaRepository fornadaRepository;
     private final ProdutoRepository produtoRepository;
     private final FornadaMapper fornadaMapper;
@@ -129,11 +128,6 @@ public class FornadaService {
 
     }
 
-    /**
-     * Se o dia já foi fechado, a produção total não pode ficar abaixo da sobra registrada.
-     * Precisa rodar ANTES de alterar a fornada: a consulta de soma faz o Hibernate gravar
-     * as mudanças pendentes, e aí a soma já viria com o valor novo.
-     */
     private void validarContraFechamento(Fornada fornada, int novaQtdProduzida){
 
         UUID produtoId = fornada.getProduto().getId();
