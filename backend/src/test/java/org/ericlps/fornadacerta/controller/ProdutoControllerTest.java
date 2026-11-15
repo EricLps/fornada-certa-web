@@ -1,19 +1,24 @@
 package org.ericlps.fornadacerta.controller;
 
+import org.ericlps.fornadacerta.dto.ItemReceitaResponse;
+import org.ericlps.fornadacerta.dto.ProdutoDetalheResponse;
 import org.ericlps.fornadacerta.dto.ProdutoPatchRequest;
 import org.ericlps.fornadacerta.dto.ProdutoRequest;
 import org.ericlps.fornadacerta.dto.ProdutoResponse;
+import org.ericlps.fornadacerta.entity.enums.OrigemProduto;
+import org.ericlps.fornadacerta.entity.enums.UnidadeMedida;
 import org.ericlps.fornadacerta.exception.ConflitoException;
 import org.ericlps.fornadacerta.exception.RecursoNaoEncontradoException;
+import org.ericlps.fornadacerta.exception.RegraDeNegocioException;
 import org.ericlps.fornadacerta.service.ProdutoService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Sort;
-import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -41,11 +46,37 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(ProdutoController.class)
 class ProdutoControllerTest {
 
+    private static final UUID INSUMO = UUID.fromString("11111111-1111-1111-1111-111111111111");
+
+    // Item de ficha técnica válido, para reaproveitar nos JSONs
+    private static final String ITENS_OK = "[{ \"insumoId\": \"" + INSUMO + "\", \"quantidade\": 1 }]";
+
     @Autowired
     private MockMvc mockMvc;
 
     @MockitoBean
     private ProdutoService produtoService;
+
+    private static ProdutoResponse response(UUID id, String nome, String preco, String custo, boolean ativo) {
+        return new ProdutoResponse(id, nome, new BigDecimal(preco), new BigDecimal(custo), ativo,
+                OrigemProduto.PRODUCAO_PROPRIA, 10);
+    }
+
+    // Monta um JSON de cadastro; passe null para deixar um campo de fora
+    private static String cadastroJson(String nome, String preco, String origem, String rendimento, String itens) {
+        StringBuilder json = new StringBuilder("{");
+        if (nome != null) json.append("\"nome\": ").append(nome).append(",");
+        if (preco != null) json.append("\"preco\": ").append(preco).append(",");
+        if (origem != null) json.append("\"origem\": ").append(origem).append(",");
+        if (rendimento != null) json.append("\"rendimento\": ").append(rendimento).append(",");
+        if (itens != null) json.append("\"itens\": ").append(itens).append(",");
+        if (json.charAt(json.length() - 1) == ',') json.setLength(json.length() - 1);
+        return json.append("}").toString();
+    }
+
+    private static String cadastroValido() {
+        return cadastroJson("\"Pão francês\"", "0.80", "\"FORNECEDOR\"", "80", ITENS_OK);
+    }
 
     // =====================================================================
     @Nested
@@ -58,54 +89,52 @@ class ProdutoControllerTest {
         }
 
         @Test
-        @DisplayName("dados válidos: 201 com o produto criado")
+        @DisplayName("dados válidos: 201 com o produto criado, origem e rendimento")
         void valido() throws Exception {
             UUID id = UUID.randomUUID();
             when(produtoService.cadastrarProduto(any(ProdutoRequest.class)))
-                    .thenReturn(new ProdutoResponse(id, "Pão francês", new BigDecimal("0.80"), new BigDecimal("0.40"), true));
+                    .thenReturn(new ProdutoResponse(id, "Pão francês", new BigDecimal("0.80"), new BigDecimal("0.60"),
+                            true, OrigemProduto.FORNECEDOR, 80));
 
-            mockMvc.perform(post("/produto")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("""
-                                    { "nome": "Pão francês", "preco": 0.80, "custo": 0.40 }
-                                    """))
+            mockMvc.perform(post("/produto").contentType(MediaType.APPLICATION_JSON).content(cadastroValido()))
                     .andExpect(status().isCreated())
                     .andExpect(jsonPath("$.id").value(id.toString()))
                     .andExpect(jsonPath("$.nome").value("Pão francês"))
                     .andExpect(jsonPath("$.preco").value(0.8))
-                    .andExpect(jsonPath("$.custo").value(0.4))
-                    .andExpect(jsonPath("$.ativo").value(true));
+                    .andExpect(jsonPath("$.custo").value(0.6))
+                    .andExpect(jsonPath("$.ativo").value(true))
+                    .andExpect(jsonPath("$.origem").value("FORNECEDOR"))
+                    .andExpect(jsonPath("$.rendimento").value(80));
         }
 
         @Test
-        @DisplayName("repassa ao service exatamente o que veio no JSON")
+        @DisplayName("repassa ao service exatamente o que veio no JSON, incluindo os itens")
         void repassaRequest() throws Exception {
             when(produtoService.cadastrarProduto(any(ProdutoRequest.class)))
-                    .thenReturn(new ProdutoResponse(UUID.randomUUID(), "Sonho", new BigDecimal("6.50"), new BigDecimal("3.25"), true));
+                    .thenReturn(response(UUID.randomUUID(), "Sonho", "6.50", "3.25", true));
 
-            postJson("""
-                    { "nome": "Sonho", "preco": 6.50, "custo": 0.40 }
-                    """, 201);
+            postJson(cadastroJson("\"Sonho\"", "6.50", "\"PRODUCAO_PROPRIA\"", "20",
+                    "[{ \"insumoId\": \"" + INSUMO + "\", \"quantidade\": 0.250 }]"), 201);
 
             ArgumentCaptor<ProdutoRequest> captor = ArgumentCaptor.forClass(ProdutoRequest.class);
             verify(produtoService).cadastrarProduto(captor.capture());
-            assertThat(captor.getValue().nome()).isEqualTo("Sonho");
-            assertThat(captor.getValue().preco()).isEqualByComparingTo("6.50");
-            assertThat(captor.getValue().custo()).isEqualByComparingTo("0.40");
+            ProdutoRequest request = captor.getValue();
+            assertThat(request.nome()).isEqualTo("Sonho");
+            assertThat(request.preco()).isEqualByComparingTo("6.50");
+            assertThat(request.origem()).isEqualTo(OrigemProduto.PRODUCAO_PROPRIA);
+            assertThat(request.rendimento()).isEqualTo(20);
+            assertThat(request.itens()).singleElement().satisfies(item -> {
+                assertThat(item.insumoId()).isEqualTo(INSUMO);
+                assertThat(item.quantidade()).isEqualByComparingTo("0.25");
+            });
         }
 
         @Test
         @DisplayName("nome vazio, só com espaços ou ausente: 400 sem chamar o service")
         void nomeInvalido() throws Exception {
-            postJson("""
-                    { "nome": "", "preco": 0.80, "custo": 0.40 }
-                    """, 400);
-            postJson("""
-                    { "nome": "   ", "preco": 0.80, "custo": 0.40 }
-                    """, 400);
-            postJson("""
-                    { "preco": 0.80, "custo": 0.40 }
-                    """, 400);
+            postJson(cadastroJson("\"\"", "0.80", "\"FORNECEDOR\"", "80", ITENS_OK), 400);
+            postJson(cadastroJson("\"   \"", "0.80", "\"FORNECEDOR\"", "80", ITENS_OK), 400);
+            postJson(cadastroJson(null, "0.80", "\"FORNECEDOR\"", "80", ITENS_OK), 400);
 
             verify(produtoService, never()).cadastrarProduto(any());
         }
@@ -113,38 +142,69 @@ class ProdutoControllerTest {
         @Test
         @DisplayName("preço ausente, zero, negativo ou texto: 400 sem chamar o service")
         void precoInvalido() throws Exception {
-            postJson("""
-                    { "nome": "Pão francês", "custo": 0.40 }
-                    """, 400);
-            postJson("""
-                    { "nome": "Pão francês", "preco": 0, "custo": 0.40 }
-                    """, 400);
-            postJson("""
-                    { "nome": "Pão francês", "preco": -1, "custo": 0.40 }
-                    """, 400);
-            postJson("""
-                    { "nome": "Pão francês", "preco": "abc", "custo": 0.40 }
-                    """, 400);
+            postJson(cadastroJson("\"Pão\"", null, "\"FORNECEDOR\"", "80", ITENS_OK), 400);
+            postJson(cadastroJson("\"Pão\"", "0", "\"FORNECEDOR\"", "80", ITENS_OK), 400);
+            postJson(cadastroJson("\"Pão\"", "-1", "\"FORNECEDOR\"", "80", ITENS_OK), 400);
+            postJson(cadastroJson("\"Pão\"", "\"abc\"", "\"FORNECEDOR\"", "80", ITENS_OK), 400);
 
             verify(produtoService, never()).cadastrarProduto(any());
         }
 
         @Test
-        @DisplayName("custo ausente, zero, negativo ou texto: 400 com erros.custo, sem chamar o service")
-        void custoInvalido() throws Exception {
-            for (String json : new String[]{
-                    "{ \"nome\": \"Pão francês\", \"preco\": 0.80 }",
-                    "{ \"nome\": \"Pão francês\", \"preco\": 0.80, \"custo\": 0 }",
-                    "{ \"nome\": \"Pão francês\", \"preco\": 0.80, \"custo\": -0.10 }"}) {
-                mockMvc.perform(post("/produto").contentType(MediaType.APPLICATION_JSON).content(json))
+        @DisplayName("origem ausente ou fora do enum: 400 sem chamar o service")
+        void origemInvalida() throws Exception {
+            mockMvc.perform(post("/produto").contentType(MediaType.APPLICATION_JSON)
+                            .content(cadastroJson("\"Pão\"", "0.80", null, "80", ITENS_OK)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.erros.origem").isNotEmpty());
+            postJson(cadastroJson("\"Pão\"", "0.80", "\"PADARIA\"", "80", ITENS_OK), 400);
+
+            verify(produtoService, never()).cadastrarProduto(any());
+        }
+
+        @Test
+        @DisplayName("rendimento ausente, zero ou negativo: 400 com erros.rendimento")
+        void rendimentoInvalido() throws Exception {
+            for (String rendimento : new String[]{null, "0", "-3"}) {
+                mockMvc.perform(post("/produto").contentType(MediaType.APPLICATION_JSON)
+                                .content(cadastroJson("\"Pão\"", "0.80", "\"FORNECEDOR\"", rendimento, ITENS_OK)))
                         .andExpect(status().isBadRequest())
-                        .andExpect(jsonPath("$.erros.custo").isNotEmpty())
-                        .andExpect(jsonPath("$.erros.nome").doesNotExist())
-                        .andExpect(jsonPath("$.erros.preco").doesNotExist());
+                        .andExpect(jsonPath("$.erros.rendimento").isNotEmpty())
+                        .andExpect(jsonPath("$.erros.nome").doesNotExist());
             }
-            postJson("""
-                    { "nome": "Pão francês", "preco": 0.80, "custo": "abc" }
-                    """, 400);
+
+            verify(produtoService, never()).cadastrarProduto(any());
+        }
+
+        @Test
+        @DisplayName("sem itens ou lista vazia: 400 com erros.itens")
+        void semItens() throws Exception {
+            for (String itens : new String[]{null, "[]"}) {
+                mockMvc.perform(post("/produto").contentType(MediaType.APPLICATION_JSON)
+                                .content(cadastroJson("\"Pão\"", "0.80", "\"FORNECEDOR\"", "80", itens)))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.erros.itens").isNotEmpty());
+            }
+
+            verify(produtoService, never()).cadastrarProduto(any());
+        }
+
+        @Test
+        @DisplayName("item sem insumo ou com quantidade zero/negativa: 400 apontando o campo do item")
+        void itemInvalido() throws Exception {
+            mockMvc.perform(post("/produto").contentType(MediaType.APPLICATION_JSON)
+                            .content(cadastroJson("\"Pão\"", "0.80", "\"FORNECEDOR\"", "80", "[{ \"quantidade\": 1 }]")))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.erros['itens[0].insumoId']").isNotEmpty());
+            mockMvc.perform(post("/produto").contentType(MediaType.APPLICATION_JSON)
+                            .content(cadastroJson("\"Pão\"", "0.80", "\"FORNECEDOR\"", "80",
+                                    "[{ \"insumoId\": \"" + INSUMO + "\", \"quantidade\": 0 }]")))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.erros['itens[0].quantidade']").isNotEmpty());
+            postJson(cadastroJson("\"Pão\"", "0.80", "\"FORNECEDOR\"", "80",
+                    "[{ \"insumoId\": \"" + INSUMO + "\", \"quantidade\": -1 }]"), 400);
+            postJson(cadastroJson("\"Pão\"", "0.80", "\"FORNECEDOR\"", "80",
+                    "[{ \"insumoId\": \"nao-e-uuid\", \"quantidade\": 1 }]"), 400);
 
             verify(produtoService, never()).cadastrarProduto(any());
         }
@@ -174,11 +234,7 @@ class ProdutoControllerTest {
             when(produtoService.cadastrarProduto(any(ProdutoRequest.class)))
                     .thenThrow(new ConflitoException("Já existe um produto cadastrado como: Pão francês"));
 
-            mockMvc.perform(post("/produto")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("""
-                                    { "nome": "Pão francês", "preco": 0.80, "custo": 0.40 }
-                                    """))
+            mockMvc.perform(post("/produto").contentType(MediaType.APPLICATION_JSON).content(cadastroValido()))
                     .andExpect(status().isConflict())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                     .andExpect(jsonPath("$.status").value(409))
@@ -187,35 +243,43 @@ class ProdutoControllerTest {
         }
 
         @Test
+        @DisplayName("ficha técnica recusada pelo service: 422 com a mensagem da regra")
+        void fichaRecusada() throws Exception {
+            when(produtoService.cadastrarProduto(any(ProdutoRequest.class)))
+                    .thenThrow(new RegraDeNegocioException("Produto de fornecedor usa exatamente um insumo com unidade SACO."));
+
+            mockMvc.perform(post("/produto").contentType(MediaType.APPLICATION_JSON).content(cadastroValido()))
+                    .andExpect(status().is(422))
+                    .andExpect(jsonPath("$.title").value("Regra de negócio violada"))
+                    .andExpect(jsonPath("$.detail").value("Produto de fornecedor usa exatamente um insumo com unidade SACO."));
+        }
+
+        @Test
+        @DisplayName("insumo inexistente: 404 com o detalhe vindo do service")
+        void insumoInexistente() throws Exception {
+            when(produtoService.cadastrarProduto(any(ProdutoRequest.class)))
+                    .thenThrow(new RecursoNaoEncontradoException("Insumo não encontrado: " + INSUMO));
+
+            mockMvc.perform(post("/produto").contentType(MediaType.APPLICATION_JSON).content(cadastroValido()))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.detail").value("Insumo não encontrado: " + INSUMO));
+        }
+
+        @Test
         @DisplayName("campos inválidos: 400 com o mapa 'erros', uma entrada por campo")
         void errosDeValidacaoPorCampo() throws Exception {
-            mockMvc.perform(post("/produto")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("""
-                                    { "nome": "", "preco": -1, "custo": 0.40 }
-                                    """))
+            mockMvc.perform(post("/produto").contentType(MediaType.APPLICATION_JSON)
+                            .content(cadastroJson("\"\"", "-1", "\"FORNECEDOR\"", "80", ITENS_OK)))
                     .andExpect(status().isBadRequest())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                     .andExpect(jsonPath("$.status").value(400))
                     .andExpect(jsonPath("$.title").value("Dados inválidos"))
                     .andExpect(jsonPath("$.detail").value("Um ou mais campos são inválidos."))
                     .andExpect(jsonPath("$.erros.nome").isNotEmpty())
-                    .andExpect(jsonPath("$.erros.preco").isNotEmpty());
+                    .andExpect(jsonPath("$.erros.preco").isNotEmpty())
+                    .andExpect(jsonPath("$.erros.rendimento").doesNotExist());
 
             verify(produtoService, never()).cadastrarProduto(any());
-        }
-
-        @Test
-        @DisplayName("só um campo inválido: o mapa 'erros' traz só esse campo")
-        void erroEmUmCampoSo() throws Exception {
-            mockMvc.perform(post("/produto")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("""
-                                    { "nome": "Pão francês", "preco": 0, "custo": 0.40 }
-                                    """))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.erros.preco").isNotEmpty())
-                    .andExpect(jsonPath("$.erros.nome").doesNotExist());
         }
 
         @Test
@@ -225,27 +289,58 @@ class ProdutoControllerTest {
                     .thenThrow(new DataIntegrityViolationException(
                             "duplicate key value violates unique constraint \"produto_nome_key\" [insert into produto ...]"));
 
-            mockMvc.perform(post("/produto")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("""
-                                    { "nome": "Pão francês", "preco": 0.80, "custo": 0.40 }
-                                    """))
+            mockMvc.perform(post("/produto").contentType(MediaType.APPLICATION_JSON).content(cadastroValido()))
                     .andExpect(status().isConflict())
                     .andExpect(jsonPath("$.title").value("Conflito"))
                     .andExpect(jsonPath("$.detail").value("Os dados conflitam com um registro existente."))
                     .andExpect(content().string(not(containsString("produto_nome_key"))))
                     .andExpect(content().string(not(containsString("insert into"))));
         }
+    }
+
+    // =====================================================================
+    @Nested
+    @DisplayName("GET /produto/{id}")
+    class Detalhar {
 
         @Test
-        @DisplayName("JSON malformado: 400 também no formato ProblemDetail")
-        void jsonMalformadoEmProblemDetail() throws Exception {
-            mockMvc.perform(post("/produto")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("{ \"nome\": \"Pão\", "))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                    .andExpect(jsonPath("$.status").value(400));
+        @DisplayName("existente: 200 com os itens da ficha técnica")
+        void existente() throws Exception {
+            UUID id = UUID.randomUUID();
+            when(produtoService.detalhar(id)).thenReturn(new ProdutoDetalheResponse(id, "Bolo", new BigDecimal("4.00"),
+                    new BigDecimal("1.20"), true, OrigemProduto.PRODUCAO_PROPRIA, 10, List.of(
+                    new ItemReceitaResponse(INSUMO, "Fubá", UnidadeMedida.KG, new BigDecimal("0.500"),
+                            new BigDecimal("4.90"), new BigDecimal("2.45")))));
+
+            mockMvc.perform(get("/produto/{id}", id))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.nome").value("Bolo"))
+                    .andExpect(jsonPath("$.rendimento").value(10))
+                    .andExpect(jsonPath("$.itens.length()").value(1))
+                    .andExpect(jsonPath("$.itens[0].insumoId").value(INSUMO.toString()))
+                    .andExpect(jsonPath("$.itens[0].insumoNome").value("Fubá"))
+                    .andExpect(jsonPath("$.itens[0].unidade").value("KG"))
+                    .andExpect(jsonPath("$.itens[0].custoParcial").value(2.45));
+        }
+
+        @Test
+        @DisplayName("inexistente: 404")
+        void inexistente() throws Exception {
+            UUID id = UUID.randomUUID();
+            when(produtoService.detalhar(id)).thenThrow(new RecursoNaoEncontradoException("Produto não encontrado"));
+
+            mockMvc.perform(get("/produto/{id}", id))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.detail").value("Produto não encontrado"));
+        }
+
+        @Test
+        @DisplayName("id que não é UUID: 400 sem chamar o service")
+        void idInvalido() throws Exception {
+            mockMvc.perform(get("/produto/{id}", "abc"))
+                    .andExpect(status().isBadRequest());
+
+            verify(produtoService, never()).detalhar(any());
         }
     }
 
@@ -265,17 +360,13 @@ class ProdutoControllerTest {
         @DisplayName("só um campo: 200 com o produto atualizado")
         void soUmCampo() throws Exception {
             when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
-                    .thenReturn(new ProdutoResponse(id, "Pão de sal", new BigDecimal("0.80"), new BigDecimal("0.40"), true));
+                    .thenReturn(response(id, "Pão de sal", "0.80", "0.40", true));
 
-            mockMvc.perform(patch("/produto/{id}", id)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("""
-                                    { "nome": "Pão de sal" }
-                                    """))
+            mockMvc.perform(patch("/produto/{id}", id).contentType(MediaType.APPLICATION_JSON)
+                            .content("{ \"nome\": \"Pão de sal\" }"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.id").value(id.toString()))
                     .andExpect(jsonPath("$.nome").value("Pão de sal"))
-                    .andExpect(jsonPath("$.preco").value(0.8))
                     .andExpect(jsonPath("$.ativo").value(true));
         }
 
@@ -283,70 +374,61 @@ class ProdutoControllerTest {
         @DisplayName("só status (botão da listagem): campos ausentes chegam nulos ao service")
         void soStatus() throws Exception {
             when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
-                    .thenReturn(new ProdutoResponse(id, "Pão francês", new BigDecimal("0.80"), new BigDecimal("0.40"), false));
+                    .thenReturn(response(id, "Pão francês", "0.80", "0.40", false));
 
-            patchJson(id, """
-                    { "status": false }
-                    """, 200);
+            patchJson(id, "{ \"status\": false }", 200);
 
             ArgumentCaptor<ProdutoPatchRequest> captor = ArgumentCaptor.forClass(ProdutoPatchRequest.class);
             verify(produtoService).atualizarParcialmente(eq(id), captor.capture());
-            assertThat(captor.getValue().status()).isFalse();
-            assertThat(captor.getValue().nome()).isNull();
-            assertThat(captor.getValue().preco()).isNull();
+            ProdutoPatchRequest request = captor.getValue();
+            assertThat(request.status()).isFalse();
+            assertThat(request.nome()).isNull();
+            assertThat(request.preco()).isNull();
+            assertThat(request.alteraFichaTecnica()).isFalse();
         }
 
         @Test
-        @DisplayName("só custo: chega ao service com os outros campos nulos")
-        void soCusto() throws Exception {
+        @DisplayName("ficha técnica completa: chega ao service com origem, rendimento e itens")
+        void fichaTecnica() throws Exception {
             when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
-                    .thenReturn(new ProdutoResponse(id, "Pão francês", new BigDecimal("0.80"), new BigDecimal("0.45"), true));
+                    .thenReturn(response(id, "Pão francês", "0.80", "0.60", true));
 
-            mockMvc.perform(patch("/produto/{id}", id)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("""
-                                    { "custo": 0.45 }
-                                    """))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.custo").value(0.45));
+            patchJson(id, "{ \"origem\": \"FORNECEDOR\", \"rendimento\": 80, \"itens\": " + ITENS_OK + " }", 200);
 
             ArgumentCaptor<ProdutoPatchRequest> captor = ArgumentCaptor.forClass(ProdutoPatchRequest.class);
             verify(produtoService).atualizarParcialmente(eq(id), captor.capture());
-            assertThat(captor.getValue().custo()).isEqualByComparingTo("0.45");
-            assertThat(captor.getValue().nome()).isNull();
-            assertThat(captor.getValue().preco()).isNull();
-            assertThat(captor.getValue().status()).isNull();
+            assertThat(captor.getValue().fichaTecnicaCompleta()).isTrue();
+            assertThat(captor.getValue().itens()).hasSize(1);
         }
 
         @Test
-        @DisplayName("custo zero ou negativo: 400 com erros.custo, sem chamar o service")
-        void custoInvalido() throws Exception {
-            mockMvc.perform(patch("/produto/{id}", id).contentType(MediaType.APPLICATION_JSON).content("{ \"custo\": 0 }"))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.erros.custo").isNotEmpty());
-            mockMvc.perform(patch("/produto/{id}", id).contentType(MediaType.APPLICATION_JSON).content("{ \"custo\": -1 }"))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.erros.custo").isNotEmpty());
+        @DisplayName("ficha técnica pela metade: o service responde 422")
+        void fichaIncompleta() throws Exception {
+            when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
+                    .thenThrow(new RegraDeNegocioException("Para alterar a ficha técnica, envie origem, rendimento e itens juntos."));
+
+            mockMvc.perform(patch("/produto/{id}", id).contentType(MediaType.APPLICATION_JSON)
+                            .content("{ \"rendimento\": 20 }"))
+                    .andExpect(status().is(422))
+                    .andExpect(jsonPath("$.detail").value("Para alterar a ficha técnica, envie origem, rendimento e itens juntos."));
+        }
+
+        @Test
+        @DisplayName("itens vazios, rendimento zero ou item inválido: 400 sem chamar o service")
+        void fichaInvalida() throws Exception {
+            patchJson(id, "{ \"origem\": \"FORNECEDOR\", \"rendimento\": 80, \"itens\": [] }", 400);
+            patchJson(id, "{ \"origem\": \"FORNECEDOR\", \"rendimento\": 0, \"itens\": " + ITENS_OK + " }", 400);
+            patchJson(id, "{ \"origem\": \"FORNECEDOR\", \"rendimento\": 80, \"itens\": [{ \"quantidade\": 1 }] }", 400);
+            patchJson(id, "{ \"origem\": \"OUTRA\" }", 400);
 
             verify(produtoService, never()).atualizarParcialmente(any(), any());
-        }
-
-        @Test
-        @DisplayName("todos os campos juntos: 200")
-        void todosOsCampos() throws Exception {
-            when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
-                    .thenReturn(new ProdutoResponse(id, "Pão integral", new BigDecimal("1.20"), new BigDecimal("0.60"), false));
-
-            patchJson(id, """
-                    { "nome": "Pão integral", "preco": 1.20, "custo": 0.60, "status": false }
-                    """, 200);
         }
 
         @Test
         @DisplayName("corpo vazio {}: 200, pois nada para alterar é válido")
         void corpoVazio() throws Exception {
             when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
-                    .thenReturn(new ProdutoResponse(id, "Pão francês", new BigDecimal("0.80"), new BigDecimal("0.40"), true));
+                    .thenReturn(response(id, "Pão francês", "0.80", "0.40", true));
 
             patchJson(id, "{}", 200);
         }
@@ -354,9 +436,7 @@ class ProdutoControllerTest {
         @Test
         @DisplayName("nome vazio ou acima de 100 caracteres: 400 sem chamar o service")
         void nomeInvalido() throws Exception {
-            patchJson(id, """
-                    { "nome": "" }
-                    """, 400);
+            patchJson(id, "{ \"nome\": \"\" }", 400);
             patchJson(id, "{ \"nome\": \"" + "a".repeat(101) + "\" }", 400);
 
             verify(produtoService, never()).atualizarParcialmente(any(), any());
@@ -365,15 +445,9 @@ class ProdutoControllerTest {
         @Test
         @DisplayName("preço zero, negativo ou texto: 400 sem chamar o service")
         void precoInvalido() throws Exception {
-            patchJson(id, """
-                    { "preco": 0 }
-                    """, 400);
-            patchJson(id, """
-                    { "preco": -5 }
-                    """, 400);
-            patchJson(id, """
-                    { "preco": "abc" }
-                    """, 400);
+            patchJson(id, "{ \"preco\": 0 }", 400);
+            patchJson(id, "{ \"preco\": -5 }", 400);
+            patchJson(id, "{ \"preco\": \"abc\" }", 400);
 
             verify(produtoService, never()).atualizarParcialmente(any(), any());
         }
@@ -381,9 +455,7 @@ class ProdutoControllerTest {
         @Test
         @DisplayName("status que não é booleano: 400 sem chamar o service")
         void statusInvalido() throws Exception {
-            patchJson(id, """
-                    { "status": "talvez" }
-                    """, 400);
+            patchJson(id, "{ \"status\": \"talvez\" }", 400);
 
             verify(produtoService, never()).atualizarParcialmente(any(), any());
         }
@@ -391,9 +463,7 @@ class ProdutoControllerTest {
         @Test
         @DisplayName("id que não é UUID: 400 sem chamar o service")
         void idInvalido() throws Exception {
-            patchJson("abc", """
-                    { "nome": "Pão de sal" }
-                    """, 400);
+            patchJson("abc", "{ \"nome\": \"Pão de sal\" }", 400);
 
             verify(produtoService, never()).atualizarParcialmente(any(), any());
         }
@@ -411,11 +481,8 @@ class ProdutoControllerTest {
             when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
                     .thenThrow(new RecursoNaoEncontradoException("Produto não encontrado"));
 
-            mockMvc.perform(patch("/produto/{id}", id)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("""
-                                    { "nome": "Pão de sal" }
-                                    """))
+            mockMvc.perform(patch("/produto/{id}", id).contentType(MediaType.APPLICATION_JSON)
+                            .content("{ \"nome\": \"Pão de sal\" }"))
                     .andExpect(status().isNotFound())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                     .andExpect(jsonPath("$.status").value(404))
@@ -429,11 +496,8 @@ class ProdutoControllerTest {
             when(produtoService.atualizarParcialmente(eq(id), any(ProdutoPatchRequest.class)))
                     .thenThrow(new ConflitoException("Já existe um produto cadastrado como: Sonho"));
 
-            mockMvc.perform(patch("/produto/{id}", id)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("""
-                                    { "nome": "Sonho" }
-                                    """))
+            mockMvc.perform(patch("/produto/{id}", id).contentType(MediaType.APPLICATION_JSON)
+                            .content("{ \"nome\": \"Sonho\" }"))
                     .andExpect(status().isConflict())
                     .andExpect(jsonPath("$.title").value("Conflito"))
                     .andExpect(jsonPath("$.detail").value("Já existe um produto cadastrado como: Sonho"));
@@ -446,8 +510,8 @@ class ProdutoControllerTest {
     class Listar {
 
         private final List<ProdutoResponse> lista = List.of(
-                new ProdutoResponse(UUID.randomUUID(), "Baguete", new BigDecimal("9.90"), new BigDecimal("4.95"), true),
-                new ProdutoResponse(UUID.randomUUID(), "Sonho", new BigDecimal("6.50"), new BigDecimal("3.25"), false));
+                response(UUID.randomUUID(), "Baguete", "9.90", "4.95", true),
+                response(UUID.randomUUID(), "Sonho", "6.50", "3.25", false));
 
         @Test
         @DisplayName("sem parâmetros: 200, todos os produtos, ordem padrão ASC")
@@ -458,9 +522,8 @@ class ProdutoControllerTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.length()").value(2))
                     .andExpect(jsonPath("$[0].nome").value("Baguete"))
+                    .andExpect(jsonPath("$[0].origem").value("PRODUCAO_PROPRIA"))
                     .andExpect(jsonPath("$[1].nome").value("Sonho"));
-
-            verify(produtoService).listar(null, Sort.Direction.ASC);
         }
 
         @Test
