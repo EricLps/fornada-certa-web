@@ -1,25 +1,39 @@
 import { CurrencyPipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, ElementRef, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Produto, ProdutoRequest } from '../../models/produto';
+import { RouterLink } from '@angular/router';
+import { Observable } from 'rxjs';
+import { Insumo, siglaDaUnidade } from '../../models/insumo';
+import { ItemReceita, OrigemProduto, Produto, ProdutoDetalhe, ProdutoPatch, ProdutoRequest } from '../../models/produto';
 import { tratarErroApi } from '../../services/erro-api';
+import { InsumoService } from '../../services/insumo.service';
 import { ProdutoService } from '../../services/produto.service';
 
 type Filtro = 'ativos' | 'inativos' | 'todos';
 type Modo = 'fechado' | 'novo' | 'editando';
 
+interface LinhaReceita {
+  insumo: Insumo;
+  quantidade: number | null;
+}
+
 @Component({
   selector: 'app-produtos',
   host: { class: 'pagina' },
-  imports: [ReactiveFormsModule, CurrencyPipe],
+  imports: [ReactiveFormsModule, CurrencyPipe, RouterLink],
   templateUrl: './produtos.html',
   styleUrl: './produtos.css',
 })
 export class Produtos implements OnInit {
 
   private readonly produtoService = inject(ProdutoService);
+  private readonly insumoService = inject(InsumoService);
   private readonly fb = inject(FormBuilder);
+
+  private readonly modal = viewChild.required<ElementRef<HTMLDialogElement>>('modal');
+
+  readonly sigla = siglaDaUnidade;
 
   readonly filtros: { valor: Filtro; rotulo: string }[] = [
     { valor: 'ativos', rotulo: 'Ativos' },
@@ -27,30 +41,70 @@ export class Produtos implements OnInit {
     { valor: 'todos', rotulo: 'Todos' },
   ];
 
+  readonly origens: { valor: OrigemProduto; rotulo: string }[] = [
+    { valor: 'PRODUCAO_PROPRIA', rotulo: 'Produção própria' },
+    { valor: 'FORNECEDOR', rotulo: 'Fornecedor' },
+  ];
+
   readonly filtro = signal<Filtro>('ativos');
   readonly modo = signal<Modo>('fechado');
   readonly produtos = signal<Produto[]>([]);
+  readonly insumos = signal<Insumo[]>([]);
   readonly busca = signal('');
   readonly selecionado = signal<Produto | null>(null);
   readonly carregando = signal(false);
+  readonly carregandoFicha = signal(false);
   readonly salvando = signal(false);
+  readonly tentouSalvar = signal(false);
   readonly erro = signal<string | null>(null);
   readonly errosCampo = signal<Record<string, string>>({});
   readonly sucesso = signal<string | null>(null);
+
+  readonly origem = signal<OrigemProduto>('PRODUCAO_PROPRIA');
+  readonly receita = signal<LinhaReceita[]>([]);
+  readonly sacoId = signal<string | null>(null);
+  readonly semFicha = signal(false);
+
+  readonly buscaModal = signal('');
+  readonly rascunho = signal<Record<string, number | null>>({});
 
   readonly visiveis = computed(() => {
     const termo = this.busca().trim().toLowerCase();
     return this.produtos().filter(p => p.nome.toLowerCase().includes(termo));
   });
 
+  readonly sacos = computed(() => this.insumos().filter(i => i.unidade === 'SACO'));
+
+  readonly insumosDoModal = computed(() => {
+    const termo = this.buscaModal().trim().toLowerCase();
+    return this.insumos().filter(i => i.nome.toLowerCase().includes(termo));
+  });
+
+  readonly selecionadosNoModal = computed(() => Object.keys(this.rascunho()).length);
+
+  readonly custoDaReceita = computed(() => {
+    if (this.origem() === 'FORNECEDOR') {
+      return this.sacos().find(s => s.id === this.sacoId())?.custoUnitario ?? null;
+    }
+    const linhas = this.receita();
+    if (linhas.length === 0) {
+      return null;
+    }
+    return linhas.reduce((total, l) => total + (l.quantidade ?? 0) * l.insumo.custoUnitario, 0);
+  });
+
   readonly form = this.fb.group({
     nome: this.fb.nonNullable.control('', [Validators.required, Validators.maxLength(100)]),
     preco: this.fb.control<number | null>(null, [Validators.required, Validators.min(0.01)]),
-    custo: this.fb.control<number | null>(null, [Validators.required, Validators.min(0.01)]),
+    rendimento: this.fb.control<number | null>(null, [Validators.min(1), Validators.pattern(/^\d+$/)]),
   });
 
   ngOnInit(): void {
     this.carregar();
+    this.insumoService.listar().subscribe({
+      next: insumos => this.insumos.set(insumos),
+      error: (e: HttpErrorResponse) => this.erro.set(tratarErroApi(e).mensagem),
+    });
   }
 
   carregar(): void {
@@ -77,27 +131,147 @@ export class Produtos implements OnInit {
   novo(): void {
     this.selecionado.set(null);
     this.form.reset();
+    this.limparFicha();
     this.limparMensagens();
     this.modo.set('novo');
   }
 
   editar(produto: Produto): void {
     this.selecionado.set(produto);
-    this.form.setValue({ nome: produto.nome, preco: produto.preco, custo: produto.custo });
+    this.form.setValue({ nome: produto.nome, preco: produto.preco, rendimento: produto.rendimento });
+    this.limparFicha();
     this.limparMensagens();
     this.modo.set('editando');
+    this.carregandoFicha.set(true);
+
+    this.produtoService.detalhar(produto.id).subscribe({
+      next: detalhe => {
+        this.carregarFicha(detalhe);
+        this.carregandoFicha.set(false);
+      },
+      error: (e: HttpErrorResponse) => {
+        this.erro.set(tratarErroApi(e).mensagem);
+        this.carregandoFicha.set(false);
+      },
+    });
   }
 
   fechar(): void {
     this.selecionado.set(null);
     this.form.reset();
+    this.limparFicha();
     this.errosCampo.set({});
     this.erro.set(null);
     this.modo.set('fechado');
   }
 
+  escolherOrigem(origem: OrigemProduto): void {
+    this.origem.set(origem);
+  }
+
+  escolherSaco(evento: Event): void {
+    const valor = (evento.target as HTMLSelectElement).value;
+    this.sacoId.set(valor || null);
+  }
+
+  alterarQuantidade(insumoId: string, evento: Event): void {
+    const quantidade = this.numero(evento);
+    this.receita.update(linhas => linhas.map(l => l.insumo.id === insumoId ? { ...l, quantidade } : l));
+  }
+
+  removerLinha(insumoId: string): void {
+    this.receita.update(linhas => linhas.filter(l => l.insumo.id !== insumoId));
+  }
+
+  abrirModal(): void {
+    const rascunho: Record<string, number | null> = {};
+    for (const linha of this.receita()) {
+      rascunho[linha.insumo.id] = linha.quantidade;
+    }
+    this.rascunho.set(rascunho);
+    this.buscaModal.set('');
+    this.modal().nativeElement.showModal();
+  }
+
+  fecharModal(): void {
+    this.modal().nativeElement.close();
+  }
+
+  marcadoNoModal(insumoId: string): boolean {
+    return insumoId in this.rascunho();
+  }
+
+  alternarNoModal(insumo: Insumo): void {
+    this.rascunho.update(atual => {
+      const novo = { ...atual };
+      if (insumo.id in novo) {
+        delete novo[insumo.id];
+      } else {
+        novo[insumo.id] = null;
+      }
+      return novo;
+    });
+  }
+
+  quantidadeNoModal(insumoId: string, evento: Event): void {
+    const quantidade = this.numero(evento);
+    this.rascunho.update(atual => ({ ...atual, [insumoId]: quantidade }));
+  }
+
+  aplicarModal(): void {
+    const rascunho = this.rascunho();
+    const mantidas = this.receita()
+      .filter(l => l.insumo.id in rascunho)
+      .map(l => ({ ...l, quantidade: rascunho[l.insumo.id] }));
+    const jaNaReceita = new Set(mantidas.map(l => l.insumo.id));
+    const novas = this.insumos()
+      .filter(i => i.id in rascunho && !jaNaReceita.has(i.id))
+      .map(i => ({ insumo: i, quantidade: rascunho[i.id] }));
+
+    this.receita.set([...mantidas, ...novas]);
+    this.fecharModal();
+  }
+
+  custoPorItem(): number | null {
+    const total = this.custoDaReceita();
+    const rendimento = this.form.controls.rendimento.value;
+    if (total === null || !rendimento || rendimento < 1) {
+      return this.fichaVazia() && this.selecionado() ? this.selecionado()!.custo : null;
+    }
+    return Math.round((total / rendimento) * 100) / 100;
+  }
+
+  margem(): number | null {
+    const preco = this.form.controls.preco.value;
+    const custo = this.custoPorItem();
+    return preco != null && custo != null ? preco - custo : null;
+  }
+
+  problemaNaFicha(): string | null {
+    if (this.modo() === 'editando' && this.semFicha() && this.fichaVazia()) {
+      return null;
+    }
+    const rendimento = this.form.controls.rendimento.value;
+    if (this.origem() === 'FORNECEDOR' && !this.sacoId()) {
+      return 'Escolha o saco do fornecedor.';
+    }
+    if (this.origem() === 'PRODUCAO_PROPRIA' && this.receita().length === 0) {
+      return 'Adicione ao menos um insumo à receita.';
+    }
+    if (this.receita().some(l => !l.quantidade || l.quantidade <= 0) && this.origem() === 'PRODUCAO_PROPRIA') {
+      return 'Preencha uma quantidade maior que zero para cada insumo.';
+    }
+    if (!rendimento || rendimento < 1 || this.form.controls.rendimento.invalid) {
+      return this.origem() === 'FORNECEDOR'
+        ? 'Informe quantos itens um saco rende.'
+        : 'Informe quantos itens a receita rende.';
+    }
+    return this.errosCampo()['itens'] ?? null;
+  }
+
   salvar(): void {
-    if (this.form.invalid) {
+    this.tentouSalvar.set(true);
+    if (this.form.invalid || this.problemaNaFicha()) {
       this.form.markAllAsTouched();
       return;
     }
@@ -105,11 +279,21 @@ export class Produtos implements OnInit {
     this.limparMensagens();
     this.salvando.set(true);
 
-    const dados = this.form.getRawValue() as ProdutoRequest;
+    const { nome, preco, rendimento } = this.form.getRawValue();
     const atual = this.selecionado();
-    const requisicao = atual
-      ? this.produtoService.atualizar(atual.id, dados)
-      : this.produtoService.cadastrar(dados);
+    const mandaFicha = !(atual && this.semFicha() && this.fichaVazia());
+
+    let requisicao: Observable<Produto>;
+    if (atual) {
+      const alteracoes: ProdutoPatch = { nome, preco: preco! };
+      if (mandaFicha) {
+        Object.assign(alteracoes, { origem: this.origem(), rendimento: rendimento!, itens: this.itens() });
+      }
+      requisicao = this.produtoService.atualizar(atual.id, alteracoes);
+    } else {
+      const dados: ProdutoRequest = { nome, preco: preco!, origem: this.origem(), rendimento: rendimento!, itens: this.itens() };
+      requisicao = this.produtoService.cadastrar(dados);
+    }
 
     requisicao.subscribe({
       next: produto => {
@@ -139,12 +323,7 @@ export class Produtos implements OnInit {
     });
   }
 
-  margem(): number | null {
-    const { preco, custo } = this.form.getRawValue();
-    return preco != null && custo != null ? preco - custo : null;
-  }
-
-  erroDoCampo(campo: 'nome' | 'preco' | 'custo'): string | null {
+  erroDoCampo(campo: 'nome' | 'preco' | 'rendimento'): string | null {
     const doServidor = this.errosCampo()[campo];
     if (doServidor) {
       return doServidor;
@@ -158,12 +337,54 @@ export class Produtos implements OnInit {
       return 'Campo obrigatório.';
     }
     if (controle.hasError('min')) {
-      return 'Precisa ser maior que zero.';
+      return campo === 'rendimento' ? 'Precisa render pelo menos 1 item.' : 'Precisa ser maior que zero.';
+    }
+    if (controle.hasError('pattern')) {
+      return 'Use um número inteiro.';
     }
     if (controle.hasError('maxlength')) {
       return 'Use no máximo 100 caracteres.';
     }
     return 'Valor inválido.';
+  }
+
+  private itens(): ItemReceita[] {
+    if (this.origem() === 'FORNECEDOR') {
+      return [{ insumoId: this.sacoId()!, quantidade: 1 }];
+    }
+    return this.receita().map(l => ({ insumoId: l.insumo.id, quantidade: l.quantidade! }));
+  }
+
+  private fichaVazia(): boolean {
+    return this.origem() === 'FORNECEDOR' ? !this.sacoId() : this.receita().length === 0;
+  }
+
+  private carregarFicha(detalhe: ProdutoDetalhe): void {
+    this.origem.set(detalhe.origem);
+    this.semFicha.set(detalhe.itens.length === 0);
+
+    if (detalhe.origem === 'FORNECEDOR') {
+      this.sacoId.set(detalhe.itens[0]?.insumoId ?? null);
+      return;
+    }
+
+    this.receita.set(detalhe.itens.map(i => ({
+      insumo: { id: i.insumoId, nome: i.insumoNome, unidade: i.unidade, custoUnitario: i.custoUnitario },
+      quantidade: i.quantidade,
+    })));
+  }
+
+  private limparFicha(): void {
+    this.origem.set('PRODUCAO_PROPRIA');
+    this.receita.set([]);
+    this.sacoId.set(null);
+    this.semFicha.set(false);
+    this.tentouSalvar.set(false);
+  }
+
+  private numero(evento: Event): number | null {
+    const valor = (evento.target as HTMLInputElement).valueAsNumber;
+    return Number.isNaN(valor) ? null : valor;
   }
 
   private limparMensagens(): void {

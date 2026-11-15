@@ -41,7 +41,12 @@
           <li class="item" [class.selecionado]="selecionado()?.id === p.id" [class.inativo]="!p.ativo">
             <div class="item-info">
               <span class="item-nome">{{ p.nome }}</span>
-              <span class="item-detalhe">{{ p.preco | currency:'BRL' }} · custo {{ p.custo | currency:'BRL' }}</span>
+              <span class="item-detalhe">
+                {{ p.preco | currency:'BRL' }} · custo {{ p.custo | currency:'BRL' }}
+                @if (p.origem === 'FORNECEDOR') {
+                  <span class="tag">Fornecedor</span>
+                }
+              </span>
             </div>
             <div class="item-acoes">
               <button type="button" class="btn-icone" [attr.aria-label]="'Editar ' + p.nome" title="Editar" (click)="editar(p)">
@@ -102,24 +107,140 @@
           </div>
 
           <div class="campo">
-            <label for="custo">Custo de produção (R$)</label>
-            <input id="custo" type="number" step="0.01" min="0" formControlName="custo" [class.invalido]="erroDoCampo('custo')">
-            @if (erroDoCampo('custo'); as msg) {
-              <span class="erro-campo">{{ msg }}</span>
-            }
+            <span class="rotulo">Custo por item</span>
+            <span class="valor-calculado">
+              {{ custoPorItem() === null ? '—' : (custoPorItem() | currency:'BRL') }}
+            </span>
           </div>
 
           <div class="campo">
             <span class="rotulo">Margem por item</span>
-            <span class="margem" [class.negativa]="(margem() ?? 0) < 0">
+            <span class="valor-calculado margem" [class.negativa]="(margem() ?? 0) < 0">
               {{ margem() === null ? '—' : (margem() | currency:'BRL') }}
             </span>
           </div>
         </div>
 
+        <fieldset class="ficha" [disabled]="carregandoFicha()">
+          <legend>Ficha técnica</legend>
+
+          <div class="abas" role="group" aria-label="Origem do produto">
+            @for (o of origens; track o.valor) {
+              <button type="button" class="aba" [attr.aria-pressed]="origem() === o.valor" (click)="escolherOrigem(o.valor)">
+                {{ o.rotulo }}
+              </button>
+            }
+          </div>
+
+          @if (carregandoFicha()) {
+            <p class="dica">Carregando ficha técnica...</p>
+          } @else {
+            @if (semFicha()) {
+              <div class="alerta alerta-aviso">
+                Este produto ainda usa o custo digitado à mão ({{ selecionado()?.custo | currency:'BRL' }}).
+                Monte a ficha técnica para o custo passar a ser calculado pelos insumos.
+              </div>
+            }
+
+            @if (origem() === 'FORNECEDOR') {
+              <p class="dica">Comprado pronto: o custo vem do saco do fornecedor dividido pelos itens que ele rende.</p>
+              <div class="linha">
+                <div class="campo">
+                  <label for="saco">Saco do fornecedor</label>
+                  <select id="saco" [value]="sacoId() ?? ''" (change)="escolherSaco($event)">
+                    <option value="">Escolha</option>
+                    @for (s of sacos(); track s.id) {
+                      <option [value]="s.id" [selected]="s.id === sacoId()">{{ s.nome }} · {{ s.custoUnitario | currency:'BRL' }}</option>
+                    }
+                  </select>
+                  @if (sacos().length === 0) {
+                    <span class="dica">Nenhum saco cadastrado. <a routerLink="/insumos">Cadastre em Insumos</a>.</span>
+                  }
+                </div>
+
+                <div class="campo">
+                  <label for="rendimento">Itens por saco</label>
+                  <input id="rendimento" type="number" step="1" min="1" formControlName="rendimento" [class.invalido]="erroDoCampo('rendimento')">
+                  @if (erroDoCampo('rendimento'); as msg) {
+                    <span class="erro-campo">{{ msg }}</span>
+                  }
+                </div>
+              </div>
+            } @else {
+              <div class="linha">
+                <div class="campo campo-curto">
+                  <label for="rendimento">Rendimento da receita (itens)</label>
+                  <input id="rendimento" type="number" step="1" min="1" formControlName="rendimento" [class.invalido]="erroDoCampo('rendimento')">
+                  @if (erroDoCampo('rendimento'); as msg) {
+                    <span class="erro-campo">{{ msg }}</span>
+                  }
+                </div>
+              </div>
+
+              @if (receita().length === 0) {
+                <p class="vazio">Nenhum insumo na receita ainda.</p>
+              } @else {
+                <div class="tabela-rolagem">
+                  <table class="tabela receita">
+                    <thead>
+                      <tr>
+                        <th scope="col">Insumo</th>
+                        <th scope="col">Quantidade</th>
+                        <th scope="col" class="num">Custo</th>
+                        <th scope="col"><span class="sr-only">Remover</span></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (l of receita(); track l.insumo.id) {
+                        <tr>
+                          <td>{{ l.insumo.nome }}</td>
+                          <td>
+                            <div class="qtd">
+                              <input type="number" step="0.001" min="0"
+                                     [attr.aria-label]="'Quantidade de ' + l.insumo.nome"
+                                     [value]="l.quantidade"
+                                     [class.invalido]="tentouSalvar() && (!l.quantidade || l.quantidade <= 0)"
+                                     (input)="alterarQuantidade(l.insumo.id, $event)">
+                              <span>{{ sigla(l.insumo.unidade) }}</span>
+                            </div>
+                          </td>
+                          <td class="num">{{ (l.quantidade ?? 0) * l.insumo.custoUnitario | currency:'BRL' }}</td>
+                          <td class="num">
+                            <button type="button" class="btn-icone btn-icone-pequeno" [attr.aria-label]="'Remover ' + l.insumo.nome" title="Remover" (click)="removerLinha(l.insumo.id)">
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+                            </button>
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
+
+              <div>
+                <button type="button" class="btn btn-secundario" (click)="abrirModal()">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+                  Selecionar insumos
+                </button>
+              </div>
+            }
+
+            @if (custoDaReceita() !== null && form.controls.rendimento.value) {
+              <p class="resumo-custo">
+                {{ custoDaReceita() | currency:'BRL' }} ÷ {{ form.controls.rendimento.value }} itens =
+                <strong>{{ custoPorItem() | currency:'BRL' }} por item</strong>
+              </p>
+            }
+
+            @if (tentouSalvar() && problemaNaFicha(); as msg) {
+              <span class="erro-campo" role="alert">{{ msg }}</span>
+            }
+          }
+        </fieldset>
+
         <div class="acoes">
           <button type="button" class="btn btn-secundario" (click)="fechar()">Cancelar</button>
-          <button type="submit" class="btn btn-primario" [disabled]="salvando()">
+          <button type="submit" class="btn btn-primario" [disabled]="salvando() || carregandoFicha()">
             {{ salvando() ? 'Salvando...' : (modo() === 'editando' ? 'Salvar alterações' : 'Cadastrar produto') }}
           </button>
         </div>
@@ -127,3 +248,51 @@
     </section>
   }
 </div>
+
+<dialog #modal class="modal" aria-labelledby="titulo-modal">
+  <div class="modal-topo">
+    <h2 id="titulo-modal">Selecionar insumos</h2>
+    <button type="button" class="btn-icone" aria-label="Fechar" title="Fechar" (click)="fecharModal()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+    </button>
+  </div>
+
+  <div class="campo">
+    <label for="busca-insumo">Buscar insumo</label>
+    <input id="busca-insumo" type="search" placeholder="Ex.: leite, ovo, farinha" [value]="buscaModal()" (input)="buscaModal.set($any($event.target).value)">
+  </div>
+
+  <ul class="opcoes">
+    @for (i of insumosDoModal(); track i.id) {
+      <li class="opcao" [class.marcada]="marcadoNoModal(i.id)">
+        <label class="opcao-nome">
+          <input type="checkbox" [checked]="marcadoNoModal(i.id)" (change)="alternarNoModal(i)">
+          <span>
+            {{ i.nome }}
+            <small>{{ i.custoUnitario | currency:'BRL' }} por {{ sigla(i.unidade) }}</small>
+          </span>
+        </label>
+        @if (marcadoNoModal(i.id)) {
+          <div class="qtd">
+            <input type="number" step="0.001" min="0"
+                   [attr.aria-label]="'Quantidade de ' + i.nome"
+                   placeholder="Qtd."
+                   [value]="rascunho()[i.id]"
+                   (input)="quantidadeNoModal(i.id, $event)">
+            <span>{{ sigla(i.unidade) }}</span>
+          </div>
+        }
+      </li>
+    } @empty {
+      <li class="vazio">
+        Nenhum insumo encontrado. <a routerLink="/insumos" (click)="fecharModal()">Cadastre em Insumos</a>.
+      </li>
+    }
+  </ul>
+
+  <div class="acoes">
+    <span class="contador">{{ selecionadosNoModal() }} selecionado(s)</span>
+    <button type="button" class="btn btn-secundario" (click)="fecharModal()">Cancelar</button>
+    <button type="button" class="btn btn-primario" (click)="aplicarModal()">Usar na receita</button>
+  </div>
+</dialog>
