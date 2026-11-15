@@ -1,10 +1,110 @@
 <header class="page-header">
   <div>
-    <p class="eyebrow">Cadastro</p>
+    <p class="eyebrow">{{ visiveis().length }} produto(s) nesta lista</p>
     <h1>Produtos</h1>
   </div>
+  <button type="button" class="btn btn-primario" (click)="novo()">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+    Novo produto
+  </button>
 </header>
 
-<section class="card">
-  <p class="vazio">Tela em construção.</p>
-</section>
+@if (erro()) {
+  <div class="alerta alerta-erro" role="alert">{{ erro() }}</div>
+}
+@if (sucesso()) {
+  <div class="alerta alerta-sucesso" role="status">{{ sucesso() }}</div>
+}
+
+<div class="grade">
+  <section class="card lista" aria-label="Lista de produtos">
+    <div class="campo">
+      <label for="busca">Buscar produto</label>
+      <input id="busca" type="search" placeholder="Digite o nome" [value]="busca()" (input)="busca.set($any($event.target).value)">
+    </div>
+
+    <div class="abas" role="group" aria-label="Filtrar por situação">
+      @for (f of filtros; track f.valor) {
+        <button type="button" class="aba" [attr.aria-pressed]="filtro() === f.valor" (click)="escolherFiltro(f.valor)">
+          {{ f.rotulo }}
+        </button>
+      }
+    </div>
+
+    @if (carregando()) {
+      <p class="vazio">Carregando...</p>
+    } @else {
+      <ul class="itens">
+        @for (p of visiveis(); track p.id) {
+          <li class="item" [class.selecionado]="selecionado()?.id === p.id" [class.inativo]="!p.ativo">
+            <button type="button" class="item-info" (click)="editar(p)">
+              <span class="item-nome">{{ p.nome }}</span>
+              <span class="item-detalhe">{{ p.preco | currency:'BRL' }} · custo {{ p.custo | currency:'BRL' }}</span>
+            </button>
+            <button type="button" class="switch" role="switch"
+                    [attr.aria-checked]="p.ativo"
+                    [attr.aria-label]="(p.ativo ? 'Desativar ' : 'Ativar ') + p.nome"
+                    (click)="alternarStatus(p)"></button>
+          </li>
+        } @empty {
+          <li class="vazio">Nenhum produto encontrado.</li>
+        }
+      </ul>
+    }
+  </section>
+
+  <section class="card formulario" aria-labelledby="titulo-form">
+    <div>
+      <p class="eyebrow">{{ selecionado() ? 'Editando' : 'Cadastro' }}</p>
+      <h2 id="titulo-form">{{ selecionado()?.nome ?? 'Novo produto' }}</h2>
+    </div>
+
+    @if (selecionado() && !selecionado()!.ativo) {
+      <div class="alerta alerta-aviso">
+        Produto desativado: ele não aparece na fornada do dia e não recebe sugestão. O histórico continua guardado.
+      </div>
+    }
+
+    <form [formGroup]="form" (ngSubmit)="salvar()" novalidate>
+      <div class="campo">
+        <label for="nome">Nome do produto</label>
+        <input id="nome" type="text" formControlName="nome" [class.invalido]="erroDoCampo('nome')">
+        @if (erroDoCampo('nome'); as msg) {
+          <span class="erro-campo">{{ msg }}</span>
+        }
+      </div>
+
+      <div class="linha">
+        <div class="campo">
+          <label for="preco">Preço de venda (R$)</label>
+          <input id="preco" type="number" step="0.01" min="0" formControlName="preco" [class.invalido]="erroDoCampo('preco')">
+          @if (erroDoCampo('preco'); as msg) {
+            <span class="erro-campo">{{ msg }}</span>
+          }
+        </div>
+
+        <div class="campo">
+          <label for="custo">Custo de produção (R$)</label>
+          <input id="custo" type="number" step="0.01" min="0" formControlName="custo" [class.invalido]="erroDoCampo('custo')">
+          @if (erroDoCampo('custo'); as msg) {
+            <span class="erro-campo">{{ msg }}</span>
+          }
+        </div>
+
+        <div class="campo">
+          <span class="rotulo">Margem por item</span>
+          <span class="margem" [class.negativa]="(margem() ?? 0) < 0">
+            {{ margem() === null ? '—' : (margem() | currency:'BRL') }}
+          </span>
+        </div>
+      </div>
+
+      <div class="acoes">
+        <button type="button" class="btn btn-secundario" (click)="novo()">Cancelar</button>
+        <button type="submit" class="btn btn-primario" [disabled]="salvando()">
+          {{ salvando() ? 'Salvando...' : (selecionado() ? 'Salvar alterações' : 'Cadastrar produto') }}
+        </button>
+      </div>
+    </form>
+  </section>
+</div>

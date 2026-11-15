@@ -1,0 +1,112 @@
+.grade {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.lista {
+  flex: 1 1 360px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.formulario {
+  flex: 2 1 460px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.itens {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 8px;
+  border-radius: var(--raio);
+}
+
+.item.selecionado {
+  background: var(--acento-fundo);
+}
+
+.item.inativo .item-nome {
+  color: var(--texto-suave);
+  text-decoration: line-through;
+}
+
+.item-info {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 52px;
+  padding: 6px 4px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.item-nome {
+  display: block;
+  font-weight: 600;
+}
+
+.item-detalhe {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--texto-suave);
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.linha {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.linha .campo {
+  flex: 1 1 160px;
+}
+
+.rotulo {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--texto-secundario);
+}
+
+.margem {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--sucesso);
+}
+
+.margem.negativa {
+  color: var(--erro);
+}
+
+.acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
