@@ -1,0 +1,144 @@
+.indicadores {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.indicador {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 20px;
+}
+
+.rotulo {
+  font-size: 13px;
+  color: var(--texto-suave);
+}
+
+.valor {
+  font-family: var(--fonte-titulo);
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.comparacao {
+  font-size: 12px;
+  color: var(--texto-suave);
+}
+
+.bom { color: var(--sucesso); }
+.ruim, .erro { color: var(--erro); }
+
+.grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 24px;
+}
+
+.grade .card, section.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.grafico {
+  flex: 1;
+  min-height: 240px;
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+.coluna {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.barras {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  border-bottom: 1px solid var(--borda);
+}
+
+.grupo {
+  width: 40%;
+  max-width: 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+}
+
+.barra {
+  width: 100%;
+  min-height: 2px;
+  border-radius: 6px 6px 0 0;
+}
+
+.vendido { background: var(--acento); }
+.descarte { background: var(--erro); opacity: 0.55; }
+
+.numero, .dia {
+  font-size: 11px;
+  color: var(--texto-suave);
+}
+
+.numero {
+  white-space: nowrap;
+}
+
+.dia { text-transform: capitalize; }
+
+.legenda {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--texto-suave);
+}
+
+.legenda span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.marca {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.topo {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.rolagem { overflow-x: auto; }
+
+.sugestao {
+  font-weight: 700;
+  color: var(--sugestao);
+}
+
+.nota {
+  font-size: 12px;
+  color: var(--texto-suave);
+}
+
+.aviso {
+  display: block;
+  color: var(--texto-secundario);
+}

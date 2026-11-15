@@ -61,6 +61,18 @@ a {
   color: var(--acento);
 }
 
+:focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: 2px;
+}
+
+.pagina {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+
 .page-header {
   display: flex;
   flex-wrap: wrap;
@@ -95,6 +107,7 @@ a {
   font-weight: 600;
   cursor: pointer;
   border: 1px solid transparent;
+  text-decoration: none;
 }
 
 .btn:disabled {
@@ -173,6 +186,10 @@ a {
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
+}
+
+.aba:hover:not([aria-pressed="true"]) {
+  background: var(--superficie-suave);
 }
 
 .aba[aria-pressed="true"] {

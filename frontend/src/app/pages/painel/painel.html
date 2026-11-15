@@ -1,10 +1,140 @@
 <header class="page-header">
   <div>
-    <p class="eyebrow">Visão da semana</p>
+    <p class="eyebrow">{{ hoje | date:'EEEE, d \'de\' MMMM' }}</p>
     <h1>Painel</h1>
   </div>
+  <a routerLink="/fornada" class="btn btn-primario">Montar fornada</a>
 </header>
 
-<section class="card">
-  <p class="vazio">Tela em construção.</p>
-</section>
+@if (erro()) {
+  <div class="alerta alerta-erro" role="alert">{{ erro() }}</div>
+}
+
+@if (carregando()) {
+  <p class="vazio">Carregando...</p>
+} @else if (semana(); as s) {
+  <section class="indicadores" aria-label="Indicadores dos últimos 7 dias">
+    <div class="card indicador">
+      <span class="rotulo">Desperdício · 7 dias</span>
+      <span class="valor">{{ s.total.taxaDesperdicio | percent:'1.1-1' }}</span>
+      @if (variacaoTaxa(); as v) {
+        <span class="comparacao" [class.bom]="v <= 0" [class.ruim]="v > 0">
+          {{ v <= 0 ? '↓' : '↑' }} {{ (v < 0 ? -v : v) | number:'1.1-1' }} p.p. vs semana anterior
+        </span>
+      }
+    </div>
+    <div class="card indicador">
+      <span class="rotulo">Custo do desperdício</span>
+      <span class="valor erro">{{ s.total.custoDescarte | currency:'BRL' }}</span>
+      <span class="comparacao">{{ s.total.descartado }} itens no lixo</span>
+    </div>
+    <div class="card indicador">
+      <span class="rotulo">Itens vendidos</span>
+      <span class="valor">{{ s.total.vendido | number }}</span>
+      @if (variacaoVendas(); as v) {
+        <span class="comparacao" [class.bom]="v >= 0" [class.ruim]="v < 0">
+          {{ v >= 0 ? '↑' : '↓' }} {{ (v < 0 ? -v : v) | percent:'1.1-1' }} vs semana anterior
+        </span>
+      }
+    </div>
+    <div class="card indicador">
+      <span class="rotulo">Doados e reaproveitados</span>
+      <span class="valor">{{ s.total.doado + s.total.reaproveitado | number }}</span>
+      <span class="comparacao">sobras que não viraram lixo</span>
+    </div>
+  </section>
+
+  <div class="grade">
+    <section class="card" aria-labelledby="titulo-grafico">
+      <h2 id="titulo-grafico">Vendas e descarte por dia</h2>
+      <p class="eyebrow">{{ s.inicio | date:'dd/MM' }} a {{ s.fim | date:'dd/MM' }} · {{ s.total.diasFechados }} dia(s) fechado(s)</p>
+
+      <div class="grafico" role="img"
+           [attr.aria-label]="'Vendas por dia: ' + s.total.vendido + ' itens vendidos e ' + s.total.descartado + ' descartados na semana'">
+        @for (d of s.porDia; track d.data) {
+          <div class="coluna">
+            <div class="barras">
+              <div class="grupo">
+                <span class="numero">{{ d.vendido || '' }}</span>
+                <div class="barra vendido" [style.height]="altura(d.vendido)"></div>
+              </div>
+              <div class="grupo">
+                <span class="numero">{{ d.descartado || '' }}</span>
+                <div class="barra descarte" [style.height]="altura(d.descartado)"></div>
+              </div>
+            </div>
+            <span class="dia">{{ d.diaDaSemana }}</span>
+          </div>
+        }
+      </div>
+
+      <div class="legenda">
+        <span><i class="marca vendido"></i>Vendido</span>
+        <span><i class="marca descarte"></i>Descartado</span>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="titulo-ranking">
+      <h2 id="titulo-ranking">Onde está o desperdício</h2>
+      <p class="eyebrow">Produtos ordenados pelo custo do descarte na semana</p>
+      <table class="tabela">
+        <thead>
+          <tr>
+            <th scope="col">Produto</th>
+            <th scope="col">Taxa</th>
+            <th scope="col">Custo</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (p of s.porProduto; track p.produtoId) {
+            <tr>
+              <td>{{ p.produtoNome }}</td>
+              <td>{{ p.taxaDesperdicio | percent:'1.1-1' }}</td>
+              <td class="erro">{{ p.custoDescarte | currency:'BRL' }}</td>
+            </tr>
+          } @empty {
+            <tr><td colspan="3" class="vazio">Nenhum dia fechado nesta semana.</td></tr>
+          }
+        </tbody>
+      </table>
+    </section>
+  </div>
+
+  <section class="card" aria-labelledby="titulo-sugestao">
+    <div class="topo">
+      <div>
+        <h2 id="titulo-sugestao">Sugestão para amanhã</h2>
+        <p class="eyebrow">{{ amanha | date:'EEEE, d \'de\' MMMM' }} · {{ totalSugerido() | number }} itens no total</p>
+      </div>
+      <a routerLink="/fornada" class="btn btn-secundario">Usar na fornada</a>
+    </div>
+    <div class="rolagem">
+      <table class="tabela">
+        <thead>
+          <tr>
+            <th scope="col">Produto</th>
+            <th scope="col">Média vendida</th>
+            <th scope="col">Sugestão</th>
+            <th scope="col">Observação</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (sug of sugestoes(); track sug.produtoId) {
+            <tr>
+              <td>{{ sug.produtoNome }}</td>
+              <td>{{ sug.mediaVendida === null ? '—' : (sug.mediaVendida | number:'1.0-1') }}</td>
+              <td class="sugestao">{{ sug.qtdSugerida ?? '—' }}</td>
+              <td class="nota">
+                {{ sug.criterio === 'MESMO_DIA_DA_SEMANA' ? 'Média de ' + sug.amostras + ' ' + sug.diaDaSemana + '(s)' : '' }}
+                {{ sug.criterio === 'ULTIMOS_DIAS' ? 'Média dos últimos ' + sug.amostras + ' dias' : '' }}
+                @if (sug.aviso) { <span class="aviso">{{ sug.aviso }}</span> }
+              </td>
+            </tr>
+          } @empty {
+            <tr><td colspan="4" class="vazio">Nenhum produto ativo.</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+}
