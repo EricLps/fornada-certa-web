@@ -2,7 +2,12 @@
   display: flex;
   flex-wrap: wrap;
   gap: 24px;
-  align-items: flex-end;
+  align-items: flex-start;
+}
+
+.filtros .aba {
+  min-height: 44px;
+  padding: 0 18px;
 }
 
 .rotulo {

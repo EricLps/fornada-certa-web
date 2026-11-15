@@ -23,6 +23,7 @@ interface Linha {
 
 @Component({
   selector: 'app-fornada',
+  host: { class: 'pagina' },
   imports: [CurrencyPipe, DatePipe],
   templateUrl: './fornada.html',
   styleUrl: './fornada.css',

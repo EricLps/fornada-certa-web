@@ -26,6 +26,7 @@ interface Linha {
 
 @Component({
   selector: 'app-fechamento',
+  host: { class: 'pagina' },
   imports: [CurrencyPipe, DatePipe, PercentPipe],
   templateUrl: './fechamento.html',
   styleUrl: './fechamento.css',

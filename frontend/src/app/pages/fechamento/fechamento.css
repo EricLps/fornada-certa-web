@@ -5,6 +5,11 @@
   align-items: flex-end;
 }
 
+.filtros .nota {
+  max-width: 560px;
+  margin-bottom: 12px;
+}
+
 .grade {
   display: flex;
   flex-wrap: wrap;
