@@ -47,7 +47,7 @@
               <th scope="col">Produto</th>
               <th scope="col">Sugestão</th>
               <th scope="col">Quantidade</th>
-              <th scope="col">Pacotes</th>
+              <th scope="col">Sacos</th>
             </tr>
           </thead>
           <tbody>
@@ -64,7 +64,12 @@
                 </td>
                 <td>
                   @if (restante(linha) !== null) {
-                    <span class="sugestao">{{ restante(linha) }}</span>
+                    @if (linha.produto.fatias) {
+                      <span class="sugestao">{{ emUnidades(linha, restante(linha)!) }} un.</span>
+                      <span class="nota">{{ restante(linha) }} fatias</span>
+                    } @else {
+                      <span class="sugestao">{{ restante(linha) }}</span>
+                    }
                     @if (linha.produzidoNoDia > 0) {
                       <span class="nota">{{ linha.sugestaoDoDia }} no dia · {{ linha.produzidoNoDia }} já assados</span>
                     }
@@ -74,18 +79,34 @@
                 </td>
                 <td>
                   @if (linha.lancadaNoTurno !== null) {
-                    <span class="selo">Lançada: {{ linha.lancadaNoTurno }}</span>
+                    <span class="selo">
+                      Lançada: {{ linha.produto.fatias ? emUnidades(linha, linha.lancadaNoTurno) + ' un. (' + linha.lancadaNoTurno + ' fatias)' : linha.lancadaNoTurno }}
+                    </span>
                   } @else {
-                    <input type="number" min="0" step="1" class="qtd"
-                           [attr.aria-label]="'Quantidade de ' + linha.produto.nome"
-                           [value]="linha.quantidade ?? ''"
-                           (input)="definirQuantidade(linha.produto.id, $any($event.target).valueAsNumber)">
+                    <div class="entrada">
+                      <input type="number" min="0" step="1" class="qtd"
+                             [attr.aria-label]="(linha.produto.fatias ? 'Unidades inteiras de ' : 'Quantidade de ') + linha.produto.nome"
+                             [value]="linha.quantidade ?? ''"
+                             (input)="definirQuantidade(linha.produto.id, $any($event.target).valueAsNumber)">
+                      @if (linha.produto.fatias) {
+                        <span class="unidade">un.</span>
+                      }
+                    </div>
+                    @if (linha.produto.fatias && linha.quantidade) {
+                      <span class="nota">= {{ itensProduzidos(linha) }} fatias</span>
+                    }
+                    @if (esperadoDosSacos(linha); as esperado) {
+                      <span class="nota">{{ esperado }} esperados pelos sacos</span>
+                      @if (faltaramDosSacos(linha) > 0) {
+                        <span class="nota aviso-falta">vieram {{ faltaramDosSacos(linha) }} a menos</span>
+                      }
+                    }
                   }
                 </td>
                 <td>
-                  @if (linha.lancadaNoTurno === null) {
+                  @if (linha.lancadaNoTurno === null && linha.produto.origem === 'FORNECEDOR') {
                     <input type="number" min="1" step="1" class="qtd pequeno"
-                           [attr.aria-label]="'Pacotes usados de ' + linha.produto.nome"
+                           [attr.aria-label]="'Sacos usados de ' + linha.produto.nome"
                            [value]="linha.pacotes ?? ''"
                            (input)="definirPacotes(linha.produto.id, $any($event.target).valueAsNumber)">
                   }

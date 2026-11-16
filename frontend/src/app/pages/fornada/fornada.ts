@@ -51,10 +51,10 @@ export class Fornada implements OnInit {
   readonly sucesso = signal<string | null>(null);
 
   readonly pendentes = computed(() => this.linhas().filter(l => l.lancadaNoTurno === null));
-  readonly totalItens = computed(() => this.pendentes().reduce((soma, l) => soma + (l.quantidade ?? 0), 0));
+  readonly totalItens = computed(() => this.pendentes().reduce((soma, l) => soma + this.itensProduzidos(l), 0));
   readonly totalSugerido = computed(() => this.pendentes().reduce((soma, l) => soma + (this.restante(l) ?? 0), 0));
-  readonly custoTotal = computed(() => this.pendentes().reduce((soma, l) => soma + (l.quantidade ?? 0) * l.produto.custo, 0));
-  readonly receitaTotal = computed(() => this.pendentes().reduce((soma, l) => soma + (l.quantidade ?? 0) * l.produto.preco, 0));
+  readonly custoTotal = computed(() => this.pendentes().reduce((soma, l) => soma + this.itensProduzidos(l) * l.produto.custo, 0));
+  readonly receitaTotal = computed(() => this.pendentes().reduce((soma, l) => soma + this.itensProduzidos(l) * l.produto.preco, 0));
 
   ngOnInit(): void {
     this.sugerirMomento();
@@ -103,23 +103,52 @@ export class Fornada implements OnInit {
     return Math.max(0, linha.sugestaoDoDia - linha.produzidoNoDia);
   }
 
+  emUnidades(linha: Linha, itens: number): number {
+    return linha.produto.fatias ? Math.ceil(itens / linha.produto.fatias) : itens;
+  }
+
+  itensProduzidos(linha: Linha): number {
+    return (linha.quantidade ?? 0) * (linha.produto.fatias ?? 1);
+  }
+
+  esperadoDosSacos(linha: Linha): number | null {
+    if (linha.produto.origem !== 'FORNECEDOR' || !linha.produto.rendimento || !linha.pacotes) {
+      return null;
+    }
+    return linha.pacotes * linha.produto.rendimento;
+  }
+
+  faltaramDosSacos(linha: Linha): number {
+    const esperado = this.esperadoDosSacos(linha);
+    if (esperado === null || linha.quantidade === null) {
+      return 0;
+    }
+    return Math.max(0, esperado - linha.quantidade);
+  }
+
   definirQuantidade(produtoId: string, valor: number): void {
     this.atualizarLinha(produtoId, { quantidade: Number.isNaN(valor) ? null : valor, erro: null });
   }
 
   definirPacotes(produtoId: string, valor: number): void {
-    this.atualizarLinha(produtoId, { pacotes: Number.isNaN(valor) ? null : valor });
+    const pacotes = Number.isNaN(valor) ? null : valor;
+    const linha = this.linhas().find(l => l.produto.id === produtoId);
+    const mudancas: Partial<Linha> = { pacotes };
+    if (linha && linha.quantidade === null && pacotes && linha.produto.origem === 'FORNECEDOR' && linha.produto.rendimento) {
+      mudancas.quantidade = pacotes * linha.produto.rendimento;
+    }
+    this.atualizarLinha(produtoId, mudancas);
   }
 
   aplicarSugestoes(): void {
     this.linhas.update(linhas => linhas.map(l =>
       l.lancadaNoTurno === null && this.restante(l) !== null
-        ? { ...l, quantidade: this.restante(l), erro: null }
+        ? { ...l, quantidade: this.emUnidades(l, this.restante(l)!), erro: null }
         : l));
   }
 
   registrar(): void {
-    const aEnviar = this.pendentes().filter(l => (l.quantidade ?? 0) > 0);
+    const aEnviar = this.pendentes().filter(l => this.itensProduzidos(l) > 0);
 
     if (aEnviar.length === 0) {
       this.erro.set('Informe a quantidade de pelo menos um produto.');
@@ -128,7 +157,7 @@ export class Fornada implements OnInit {
 
     const itens: FornadaItemRequest[] = aEnviar.map(l => ({
       produtoId: l.produto.id,
-      qtdProduzida: l.quantidade!,
+      qtdProduzida: this.itensProduzidos(l),
       pacotesUsados: l.pacotes,
     }));
 

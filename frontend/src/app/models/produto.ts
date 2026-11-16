@@ -10,6 +10,7 @@ export interface Produto {
   ativo: boolean;
   origem: OrigemProduto;
   rendimento: number | null;
+  fatias: number | null;
 }
 
 export interface ItemReceita {
@@ -34,8 +35,9 @@ export interface ProdutoRequest {
   nome: string;
   preco: number;
   origem: OrigemProduto;
-  rendimento: number;
+  rendimento: number | null;
   itens: ItemReceita[];
+  fatias: number | null;
 }
 
 export interface ProdutoPatch {
@@ -43,6 +45,7 @@ export interface ProdutoPatch {
   preco?: number;
   status?: boolean;
   origem?: OrigemProduto;
-  rendimento?: number;
+  rendimento?: number | null;
   itens?: ItemReceita[];
+  fatias?: number | null;
 }

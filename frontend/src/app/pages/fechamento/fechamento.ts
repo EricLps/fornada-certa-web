@@ -15,6 +15,7 @@ interface Linha {
   produtoId: string;
   nome: string;
   custo: number;
+  fatias: number | null;
   produzido: number;
   fechado: FechamentoRegistrado | null;
   sobra: number | null;
@@ -196,8 +197,11 @@ export class Fechamento implements OnInit {
 
   private montarLinhas(produtos: Produto[], fornadas: Fornada[], fechamentos: FechamentoRegistrado[]): Linha[] {
     const producao = new Map<string, number>();
+    const custoProduzido = new Map<string, number>();
     for (const f of fornadas) {
       producao.set(f.produtoId, (producao.get(f.produtoId) ?? 0) + f.qtdProduzida);
+      const produto = produtos.find(p => p.id === f.produtoId);
+      custoProduzido.set(f.produtoId, (custoProduzido.get(f.produtoId) ?? 0) + this.custoDaFornada(f, produto));
     }
 
     return [...producao.entries()]
@@ -206,7 +210,8 @@ export class Fechamento implements OnInit {
         return {
           produtoId,
           nome: produto?.nome ?? fornadas.find(f => f.produtoId === produtoId)!.produtoNome,
-          custo: produto?.custo ?? 0,
+          custo: Math.round((custoProduzido.get(produtoId) ?? 0) / produzido * 100) / 100,
+          fatias: produto?.fatias ?? null,
           produzido,
           fechado: fechamentos.find(f => f.produtoId === produtoId) ?? null,
           sobra: null,
@@ -217,6 +222,16 @@ export class Fechamento implements OnInit {
         };
       })
       .sort((a, b) => a.nome.localeCompare(b.nome));
+  }
+
+  private custoDaFornada(fornada: Fornada, produto: Produto | undefined): number {
+    if (!produto) {
+      return 0;
+    }
+    if (produto.origem === 'FORNECEDOR' && produto.rendimento && fornada.pacotesUsados) {
+      return fornada.pacotesUsados * produto.custo * produto.rendimento;
+    }
+    return fornada.qtdProduzida * produto.custo;
   }
 
   private atualizarLinha(produtoId: string, mudancas: Partial<Linha>): void {

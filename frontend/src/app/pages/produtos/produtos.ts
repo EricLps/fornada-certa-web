@@ -64,6 +64,7 @@ export class Produtos implements OnInit {
   readonly receita = signal<LinhaReceita[]>([]);
   readonly sacoId = signal<string | null>(null);
   readonly semFicha = signal(false);
+  readonly emFatias = signal(false);
 
   readonly buscaModal = signal('');
   readonly rascunho = signal<Record<string, number | null>>({});
@@ -82,6 +83,8 @@ export class Produtos implements OnInit {
 
   readonly selecionadosNoModal = computed(() => Object.keys(this.rascunho()).length);
 
+  readonly sacoEscolhido = computed(() => this.sacos().find(s => s.id === this.sacoId()) ?? null);
+
   readonly custoDaReceita = computed(() => {
     if (this.origem() === 'FORNECEDOR') {
       return this.sacos().find(s => s.id === this.sacoId())?.custoUnitario ?? null;
@@ -97,6 +100,7 @@ export class Produtos implements OnInit {
     nome: this.fb.nonNullable.control('', [Validators.required, Validators.maxLength(100)]),
     preco: this.fb.control<number | null>(null, [Validators.required, Validators.min(0.01)]),
     rendimento: this.fb.control<number | null>(null, [Validators.min(1), Validators.pattern(/^\d+$/)]),
+    fatias: this.fb.control<number | null>(null, [Validators.min(2), Validators.pattern(/^\d+$/)]),
   });
 
   ngOnInit(): void {
@@ -138,7 +142,8 @@ export class Produtos implements OnInit {
 
   editar(produto: Produto): void {
     this.selecionado.set(produto);
-    this.form.setValue({ nome: produto.nome, preco: produto.preco, rendimento: produto.rendimento });
+    this.form.setValue({ nome: produto.nome, preco: produto.preco, rendimento: produto.rendimento, fatias: produto.fatias });
+    this.emFatias.set(produto.fatias !== null);
     this.limparFicha();
     this.limparMensagens();
     this.modo.set('editando');
@@ -167,6 +172,30 @@ export class Produtos implements OnInit {
 
   escolherOrigem(origem: OrigemProduto): void {
     this.origem.set(origem);
+  }
+
+  alternarFatias(evento: Event): void {
+    const marcado = (evento.target as HTMLInputElement).checked;
+    this.emFatias.set(marcado);
+    if (!marcado) {
+      this.form.controls.fatias.setValue(null);
+    }
+  }
+
+  rendimentoEfetivo(): number | null {
+    if (this.origem() === 'FORNECEDOR') {
+      return this.sacoEscolhido()?.itensPorSaco ?? null;
+    }
+    return this.form.controls.rendimento.value;
+  }
+
+  divisor(): number | null {
+    const rendimento = this.rendimentoEfetivo();
+    if (!rendimento || rendimento < 1) {
+      return null;
+    }
+    const fatias = this.emFatias() ? this.form.controls.fatias.value : 1;
+    return fatias && fatias >= 1 ? rendimento * fatias : null;
   }
 
   escolherSaco(evento: Event): void {
@@ -234,11 +263,11 @@ export class Produtos implements OnInit {
 
   custoPorItem(): number | null {
     const total = this.custoDaReceita();
-    const rendimento = this.form.controls.rendimento.value;
-    if (total === null || !rendimento || rendimento < 1) {
+    const divisor = this.divisor();
+    if (total === null || divisor === null) {
       return this.fichaVazia() && this.selecionado() ? this.selecionado()!.custo : null;
     }
-    return Math.round((total / rendimento) * 100) / 100;
+    return Math.round((total / divisor) * 100) / 100;
   }
 
   margem(): number | null {
@@ -255,15 +284,22 @@ export class Produtos implements OnInit {
     if (this.origem() === 'FORNECEDOR' && !this.sacoId()) {
       return 'Escolha o saco do fornecedor.';
     }
+    if (this.origem() === 'FORNECEDOR' && !this.sacoEscolhido()?.itensPorSaco) {
+      return 'Esse saco ainda não tem a quantidade de itens. Informe na tela de Insumos.';
+    }
+    const fatias = this.form.controls.fatias.value;
+    if (this.emFatias() && (!fatias || fatias < 2 || this.form.controls.fatias.invalid)) {
+      return 'Informe em quantas fatias cada unidade é cortada (pelo menos 2).';
+    }
     if (this.origem() === 'PRODUCAO_PROPRIA' && this.receita().length === 0) {
       return 'Adicione ao menos um insumo à receita.';
     }
     if (this.receita().some(l => !l.quantidade || l.quantidade <= 0) && this.origem() === 'PRODUCAO_PROPRIA') {
       return 'Preencha uma quantidade maior que zero para cada insumo.';
     }
-    if (!rendimento || rendimento < 1 || this.form.controls.rendimento.invalid) {
-      return this.origem() === 'FORNECEDOR'
-        ? 'Informe quantos itens um saco rende.'
+    if (this.origem() === 'PRODUCAO_PROPRIA' && (!rendimento || rendimento < 1 || this.form.controls.rendimento.invalid)) {
+      return this.emFatias()
+        ? 'Informe quantas unidades inteiras a receita rende.'
         : 'Informe quantos itens a receita rende.';
     }
     return this.errosCampo()['itens'] ?? null;
@@ -279,19 +315,22 @@ export class Produtos implements OnInit {
     this.limparMensagens();
     this.salvando.set(true);
 
-    const { nome, preco, rendimento } = this.form.getRawValue();
+    const { nome, preco } = this.form.getRawValue();
     const atual = this.selecionado();
     const mandaFicha = !(atual && this.semFicha() && this.fichaVazia());
+    const ficha = {
+      origem: this.origem(),
+      rendimento: this.origem() === 'PRODUCAO_PROPRIA' ? this.form.controls.rendimento.value : null,
+      itens: this.itens(),
+      fatias: this.emFatias() ? this.form.controls.fatias.value : null,
+    };
 
     let requisicao: Observable<Produto>;
     if (atual) {
-      const alteracoes: ProdutoPatch = { nome, preco: preco! };
-      if (mandaFicha) {
-        Object.assign(alteracoes, { origem: this.origem(), rendimento: rendimento!, itens: this.itens() });
-      }
+      const alteracoes: ProdutoPatch = mandaFicha ? { nome, preco: preco!, ...ficha } : { nome, preco: preco! };
       requisicao = this.produtoService.atualizar(atual.id, alteracoes);
     } else {
-      const dados: ProdutoRequest = { nome, preco: preco!, origem: this.origem(), rendimento: rendimento!, itens: this.itens() };
+      const dados: ProdutoRequest = { nome, preco: preco!, ...ficha };
       requisicao = this.produtoService.cadastrar(dados);
     }
 
@@ -323,7 +362,7 @@ export class Produtos implements OnInit {
     });
   }
 
-  erroDoCampo(campo: 'nome' | 'preco' | 'rendimento'): string | null {
+  erroDoCampo(campo: 'nome' | 'preco' | 'rendimento' | 'fatias'): string | null {
     const doServidor = this.errosCampo()[campo];
     if (doServidor) {
       return doServidor;
@@ -337,6 +376,9 @@ export class Produtos implements OnInit {
       return 'Campo obrigatório.';
     }
     if (controle.hasError('min')) {
+      if (campo === 'fatias') {
+        return 'Use pelo menos 2 fatias.';
+      }
       return campo === 'rendimento' ? 'Precisa render pelo menos 1 item.' : 'Precisa ser maior que zero.';
     }
     if (controle.hasError('pattern')) {
@@ -361,6 +403,8 @@ export class Produtos implements OnInit {
 
   private carregarFicha(detalhe: ProdutoDetalhe): void {
     this.origem.set(detalhe.origem);
+    this.emFatias.set(detalhe.fatias !== null);
+    this.form.controls.fatias.setValue(detalhe.fatias);
     this.semFicha.set(detalhe.itens.length === 0);
 
     if (detalhe.origem === 'FORNECEDOR') {
@@ -369,7 +413,7 @@ export class Produtos implements OnInit {
     }
 
     this.receita.set(detalhe.itens.map(i => ({
-      insumo: { id: i.insumoId, nome: i.insumoNome, unidade: i.unidade, custoUnitario: i.custoUnitario },
+      insumo: { id: i.insumoId, nome: i.insumoNome, unidade: i.unidade, custoUnitario: i.custoUnitario, itensPorSaco: null },
       quantidade: i.quantidade,
     })));
   }
@@ -379,6 +423,7 @@ export class Produtos implements OnInit {
     this.receita.set([]);
     this.sacoId.set(null);
     this.semFicha.set(false);
+    this.emFatias.set(false);
     this.tentouSalvar.set(false);
   }
 

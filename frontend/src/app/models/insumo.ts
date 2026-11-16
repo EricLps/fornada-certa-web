@@ -5,18 +5,21 @@ export interface Insumo {
   nome: string;
   unidade: UnidadeMedida;
   custoUnitario: number;
+  itensPorSaco: number | null;
 }
 
 export interface InsumoRequest {
   nome: string;
   unidade: UnidadeMedida;
   custoUnitario: number;
+  itensPorSaco: number | null;
 }
 
 export interface InsumoPatch {
   nome?: string;
   unidade?: UnidadeMedida;
   custoUnitario?: number;
+  itensPorSaco?: number | null;
 }
 
 export const UNIDADES: { valor: UnidadeMedida; rotulo: string; sigla: string }[] = [

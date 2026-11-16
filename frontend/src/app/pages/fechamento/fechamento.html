@@ -55,7 +55,12 @@
                     <span class="nota erro">{{ linha.erro }}</span>
                   }
                 </td>
-                <td>{{ linha.produzido }}</td>
+                <td>
+                  {{ linha.produzido }}
+                  @if (linha.fatias) {
+                    <span class="nota">fatias</span>
+                  }
+                </td>
                 @if (linha.fechado; as f) {
                   <td>{{ f.qtdSobra }}</td>
                   <td>{{ f.qtdDoada }}</td>

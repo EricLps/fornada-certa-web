@@ -53,6 +53,7 @@ export class Insumos implements OnInit {
     nome: this.fb.nonNullable.control('', [Validators.required, Validators.maxLength(100)]),
     unidade: this.fb.control<UnidadeMedida | null>(null, Validators.required),
     custoUnitario: this.fb.control<number | null>(null, [Validators.required, Validators.min(0.01)]),
+    itensPorSaco: this.fb.control<number | null>(null, [Validators.min(1), Validators.pattern(/^\d+$/)]),
   });
 
   ngOnInit(): void {
@@ -83,7 +84,12 @@ export class Insumos implements OnInit {
 
   editar(insumo: Insumo): void {
     this.selecionado.set(insumo);
-    this.form.setValue({ nome: insumo.nome, unidade: insumo.unidade, custoUnitario: insumo.custoUnitario });
+    this.form.setValue({
+      nome: insumo.nome,
+      unidade: insumo.unidade,
+      custoUnitario: insumo.custoUnitario,
+      itensPorSaco: insumo.itensPorSaco,
+    });
     this.limparMensagens();
     this.modo.set('editando');
   }
@@ -97,7 +103,7 @@ export class Insumos implements OnInit {
   }
 
   salvar(): void {
-    if (this.form.invalid) {
+    if (this.form.invalid || this.faltaItensPorSaco()) {
       this.form.markAllAsTouched();
       return;
     }
@@ -105,7 +111,11 @@ export class Insumos implements OnInit {
     this.limparMensagens();
     this.salvando.set(true);
 
-    const dados = this.form.getRawValue() as InsumoRequest;
+    const valores = this.form.getRawValue();
+    const dados = {
+      ...valores,
+      itensPorSaco: valores.unidade === 'SACO' ? valores.itensPorSaco : null,
+    } as InsumoRequest;
     const atual = this.selecionado();
     const requisicao = atual
       ? this.insumoService.atualizar(atual.id, dados)
@@ -134,13 +144,19 @@ export class Insumos implements OnInit {
     return unidade ? `Custo por ${this.sigla(unidade)} (R$)` : 'Custo por unidade (R$)';
   }
 
-  erroDoCampo(campo: 'nome' | 'unidade' | 'custoUnitario'): string | null {
+  erroDoCampo(campo: 'nome' | 'unidade' | 'custoUnitario' | 'itensPorSaco'): string | null {
     const doServidor = this.errosCampo()[campo];
     if (doServidor) {
       return doServidor;
     }
 
     const controle = this.form.controls[campo];
+    if (campo === 'itensPorSaco' && controle.touched && this.faltaItensPorSaco()) {
+      return 'Informe quantos itens vêm em cada saco.';
+    }
+    if (controle.hasError('pattern')) {
+      return 'Use um número inteiro.';
+    }
     if (!controle.touched || controle.valid) {
       return null;
     }
@@ -154,6 +170,11 @@ export class Insumos implements OnInit {
       return 'Use no máximo 100 caracteres.';
     }
     return 'Valor inválido.';
+  }
+
+  private faltaItensPorSaco(): boolean {
+    const { unidade, itensPorSaco } = this.form.getRawValue();
+    return unidade === 'SACO' && !itensPorSaco;
   }
 
   private limparMensagens(): void {

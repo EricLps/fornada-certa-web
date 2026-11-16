@@ -331,3 +331,34 @@ form {
   font-size: 13px;
   color: var(--texto-suave);
 }
+
+.tag-fatia {
+  background: var(--acento-fundo);
+  color: var(--acento-hover);
+}
+
+.campo-largo {
+  flex: 2 1 260px;
+}
+
+.fatias {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--borda);
+}
+
+.checagem {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.checagem input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--acento);
+}

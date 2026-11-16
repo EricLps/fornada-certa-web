@@ -10,4 +10,5 @@ export interface Sugestao {
   mediaVendida: number | null;
   qtdSugerida: number | null;
   aviso: string | null;
+  fatias: number | null;
 }

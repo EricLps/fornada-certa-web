@@ -118,3 +118,19 @@ dd {
   margin: 0;
   font-weight: 600;
 }
+
+.entrada {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.unidade {
+  font-size: 13px;
+  color: var(--texto-suave);
+}
+
+.nota.aviso-falta {
+  color: var(--erro);
+  font-weight: 600;
+}

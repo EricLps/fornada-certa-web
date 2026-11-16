@@ -42,9 +42,12 @@
             <div class="item-info">
               <span class="item-nome">{{ p.nome }}</span>
               <span class="item-detalhe">
-                {{ p.preco | currency:'BRL' }} · custo {{ p.custo | currency:'BRL' }}
+                {{ p.preco | currency:'BRL' }}{{ p.fatias ? ' a fatia' : '' }} · custo {{ p.custo | currency:'BRL' }}
                 @if (p.origem === 'FORNECEDOR') {
                   <span class="tag">Fornecedor</span>
+                }
+                @if (p.fatias) {
+                  <span class="tag tag-fatia">{{ p.fatias }} fatias</span>
                 }
               </span>
             </div>
@@ -99,7 +102,7 @@
 
         <div class="linha">
           <div class="campo">
-            <label for="preco">Preço de venda (R$)</label>
+            <label for="preco">{{ emFatias() ? 'Preço por fatia (R$)' : 'Preço de venda (R$)' }}</label>
             <input id="preco" type="number" step="0.01" min="0" formControlName="preco" [class.invalido]="erroDoCampo('preco')">
             @if (erroDoCampo('preco'); as msg) {
               <span class="erro-campo">{{ msg }}</span>
@@ -107,14 +110,14 @@
           </div>
 
           <div class="campo">
-            <span class="rotulo">Custo por item</span>
+            <span class="rotulo">{{ emFatias() ? 'Custo por fatia' : 'Custo por item' }}</span>
             <span class="valor-calculado">
               {{ custoPorItem() === null ? '—' : (custoPorItem() | currency:'BRL') }}
             </span>
           </div>
 
           <div class="campo">
-            <span class="rotulo">Margem por item</span>
+            <span class="rotulo">{{ emFatias() ? 'Margem por fatia' : 'Margem por item' }}</span>
             <span class="valor-calculado margem" [class.negativa]="(margem() ?? 0) < 0">
               {{ margem() === null ? '—' : (margem() | currency:'BRL') }}
             </span>
@@ -143,9 +146,9 @@
             }
 
             @if (origem() === 'FORNECEDOR') {
-              <p class="dica">Comprado pronto: o custo vem do saco do fornecedor dividido pelos itens que ele rende.</p>
+              <p class="dica">Comprado pronto: o custo vem do saco do fornecedor dividido pelos itens que vêm nele.</p>
               <div class="linha">
-                <div class="campo">
+                <div class="campo campo-largo">
                   <label for="saco">Saco do fornecedor</label>
                   <select id="saco" [value]="sacoId() ?? ''" (change)="escolherSaco($event)">
                     <option value="">Escolha</option>
@@ -159,17 +162,17 @@
                 </div>
 
                 <div class="campo">
-                  <label for="rendimento">Itens por saco</label>
-                  <input id="rendimento" type="number" step="1" min="1" formControlName="rendimento" [class.invalido]="erroDoCampo('rendimento')">
-                  @if (erroDoCampo('rendimento'); as msg) {
-                    <span class="erro-campo">{{ msg }}</span>
-                  }
+                  <span class="rotulo">Itens por saco</span>
+                  <span class="valor-calculado">{{ sacoEscolhido()?.itensPorSaco ?? '—' }}</span>
                 </div>
               </div>
+              @if (sacoEscolhido() && !sacoEscolhido()!.itensPorSaco) {
+                <span class="dica">Esse saco ainda não tem a quantidade de itens. <a routerLink="/insumos">Informe em Insumos</a>.</span>
+              }
             } @else {
               <div class="linha">
                 <div class="campo campo-curto">
-                  <label for="rendimento">Rendimento da receita (itens)</label>
+                  <label for="rendimento">{{ emFatias() ? 'Rendimento da receita (unidades inteiras)' : 'Rendimento da receita (itens)' }}</label>
                   <input id="rendimento" type="number" step="1" min="1" formControlName="rendimento" [class.invalido]="erroDoCampo('rendimento')">
                   @if (erroDoCampo('rendimento'); as msg) {
                     <span class="erro-campo">{{ msg }}</span>
@@ -225,10 +228,28 @@
               </div>
             }
 
-            @if (custoDaReceita() !== null && form.controls.rendimento.value) {
+            <div class="fatias">
+              <label class="checagem">
+                <input type="checkbox" [checked]="emFatias()" (change)="alternarFatias($event)">
+                Vendido em fatias (bolo, pudim, torta)
+              </label>
+              @if (emFatias()) {
+                <div class="campo campo-curto">
+                  <label for="fatias">Fatias por unidade</label>
+                  <input id="fatias" type="number" step="1" min="2" formControlName="fatias" placeholder="Ex.: 12"
+                         [class.invalido]="erroDoCampo('fatias')">
+                  @if (erroDoCampo('fatias'); as msg) {
+                    <span class="erro-campo">{{ msg }}</span>
+                  }
+                </div>
+                <p class="dica">Na fornada você lança unidades inteiras; no fechamento a sobra é contada em fatias.</p>
+              }
+            </div>
+
+            @if (custoDaReceita() !== null && divisor()) {
               <p class="resumo-custo">
-                {{ custoDaReceita() | currency:'BRL' }} ÷ {{ form.controls.rendimento.value }} itens =
-                <strong>{{ custoPorItem() | currency:'BRL' }} por item</strong>
+                {{ custoDaReceita() | currency:'BRL' }} ÷ {{ divisor() }} {{ emFatias() ? 'fatias' : 'itens' }} =
+                <strong>{{ custoPorItem() | currency:'BRL' }} por {{ emFatias() ? 'fatia' : 'item' }}</strong>
               </p>
             }
 

@@ -57,6 +57,10 @@ export class Painel implements OnInit {
   readonly totalSugerido = computed(() =>
     this.sugestoes().reduce((soma, s) => soma + (s.qtdSugerida ?? 0), 0));
 
+  unidades(fatias: number, qtd: number): number {
+    return Math.ceil(qtd / fatias);
+  }
+
   ngOnInit(): void {
     forkJoin({
       semana: this.relatorioService.gerar(this.inicio, this.fim),

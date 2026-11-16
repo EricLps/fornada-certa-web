@@ -123,7 +123,12 @@
             <tr>
               <td>{{ sug.produtoNome }}</td>
               <td>{{ sug.mediaVendida === null ? '—' : (sug.mediaVendida | number:'1.0-1') }}</td>
-              <td class="sugestao">{{ sug.qtdSugerida ?? '—' }}</td>
+              <td class="sugestao">
+                {{ sug.qtdSugerida ?? '—' }}{{ sug.fatias && sug.qtdSugerida !== null ? ' fatias' : '' }}
+                @if (sug.fatias && sug.qtdSugerida !== null) {
+                  <span class="nota">≈ {{ unidades(sug.fatias, sug.qtdSugerida) }} un. inteiras</span>
+                }
+              </td>
               <td class="nota">
                 {{ sug.criterio === 'MESMO_DIA_DA_SEMANA' ? 'Média de ' + sug.amostras + ' ' + sug.diaDaSemana + '(s)' : '' }}
                 {{ sug.criterio === 'ULTIMOS_DIAS' ? 'Média dos últimos ' + sug.amostras + ' dias' : '' }}

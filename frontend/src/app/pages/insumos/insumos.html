@@ -41,7 +41,12 @@
           <li class="item" [class.selecionado]="selecionado()?.id === i.id">
             <div class="item-info">
               <span class="item-nome">{{ i.nome }}</span>
-              <span class="item-detalhe">{{ i.custoUnitario | currency:'BRL' }} por {{ sigla(i.unidade) }}</span>
+              <span class="item-detalhe">
+                {{ i.custoUnitario | currency:'BRL' }} por {{ sigla(i.unidade) }}
+                @if (i.itensPorSaco) {
+                  · {{ i.itensPorSaco }} itens por saco
+                }
+              </span>
             </div>
             <button type="button" class="btn-icone" [attr.aria-label]="'Editar ' + i.nome" title="Editar" (click)="editar(i)">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"></path><path d="M13.5 8.5l3 3"></path></svg>
@@ -109,7 +114,20 @@
         </div>
 
         @if (form.controls.unidade.value === 'SACO') {
-          <p class="dica">Saco é a massa pronta comprada do fornecedor. Quantos itens cada saco rende você informa no produto.</p>
+          <div class="linha">
+            <div class="campo">
+              <label for="itens-por-saco">Itens que vêm em cada saco</label>
+              <input id="itens-por-saco" type="number" step="1" min="1" formControlName="itensPorSaco"
+                     placeholder="Ex.: 80" [class.invalido]="erroDoCampo('itensPorSaco')">
+              @if (erroDoCampo('itensPorSaco'); as msg) {
+                <span class="erro-campo">{{ msg }}</span>
+              }
+            </div>
+          </div>
+          <p class="dica">
+            É a quantidade normal do saco e serve para calcular o custo do produto. Se um saco vier com menos,
+            informe na fornada os sacos usados e os pães que realmente saíram: o custo daquele dia usa o número real.
+          </p>
         }
 
         <div class="acoes">
