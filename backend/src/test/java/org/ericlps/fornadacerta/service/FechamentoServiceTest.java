@@ -4,7 +4,12 @@ import org.ericlps.fornadacerta.dto.FechamentoItemRequest;
 import org.ericlps.fornadacerta.dto.FechamentoLoteRequest;
 import org.ericlps.fornadacerta.dto.FechamentoResponse;
 import org.ericlps.fornadacerta.entity.Fechamento;
+import org.ericlps.fornadacerta.entity.Fornada;
+import org.ericlps.fornadacerta.entity.Insumo;
+import org.ericlps.fornadacerta.entity.ItemReceita;
 import org.ericlps.fornadacerta.entity.Produto;
+import org.ericlps.fornadacerta.entity.enums.OrigemProduto;
+import org.ericlps.fornadacerta.entity.enums.UnidadeMedida;
 import org.ericlps.fornadacerta.exception.ConflitoException;
 import org.ericlps.fornadacerta.exception.RecursoNaoEncontradoException;
 import org.ericlps.fornadacerta.exception.RegraDeNegocioException;
@@ -88,6 +93,28 @@ class FechamentoServiceTest {
         when(fornadaRepository.somarProducaoDoDia(produto.getId(), data)).thenReturn(produzido);
     }
 
+    /** Pão de fornecedor: um saco de R$ 28,00 que normalmente rende 80 pães (custo cadastrado 0,35). */
+    private Produto paoDeFornecedor() {
+        Insumo saco = new Insumo();
+        saco.setId(UUID.randomUUID());
+        saco.setNome("Saco de massa de pão francês");
+        saco.setUnidade(UnidadeMedida.SACO);
+        saco.setCustoUnitario(new BigDecimal("28.00"));
+        saco.setItensPorSaco(80);
+        Produto pao = produto("Pão francês", "0.35", true);
+        pao.setOrigem(OrigemProduto.FORNECEDOR);
+        pao.setRendimento(80);
+        pao.getReceita().add(new ItemReceita(pao, saco, BigDecimal.ONE));
+        return pao;
+    }
+
+    private Fornada fornada(int qtdProduzida, Integer pacotesUsados) {
+        Fornada fornada = new Fornada();
+        fornada.setQtdProduzida(qtdProduzida);
+        fornada.setPacotesUsados(pacotesUsados);
+        return fornada;
+    }
+
     private void saveAllDevolveComIds() {
         when(fechamentoRepository.saveAll(any())).thenAnswer(invocacao -> {
             List<Fechamento> lista = invocacao.getArgument(0);
@@ -124,6 +151,55 @@ class FechamentoServiceTest {
             Fechamento salvo = loteCaptor.getValue().get(0);
             assertThat(salvo.getData()).isEqualTo(data);
             assertThat(salvo.getCustoUnitario()).isEqualByComparingTo("0.40");
+        }
+
+        @Test
+        @DisplayName("fornecedor com sacos informados: custo do dia = sacos × preço do saco ÷ pães que saíram")
+        void custoRealComSacos() {
+            Produto pao = paoDeFornecedor();
+            LocalDate data = hoje();
+            prepararProduto(pao, data, 140);
+            // 2 sacos que deveriam dar 160 pães, mas um veio com menos: saíram 140
+            when(fornadaRepository.findByProdutoIdAndData(pao.getId(), data)).thenReturn(List.of(fornada(140, 2)));
+            saveAllDevolveComIds();
+
+            fechamentoService.registrarLote(lote(data, new FechamentoItemRequest(pao.getId(), 10, null, null, null)));
+
+            verify(fechamentoRepository).saveAll(loteCaptor.capture());
+            // 2 × 28,00 = 56,00 ÷ 140 = 0,40 (e não os 0,35 do cadastro)
+            assertThat(loteCaptor.getValue().get(0).getCustoUnitario()).isEqualByComparingTo("0.40");
+        }
+
+        @Test
+        @DisplayName("fornecedor com um turno sem sacos informados: esse turno entra pelo custo do cadastro")
+        void custoMisturado() {
+            Produto pao = paoDeFornecedor();
+            LocalDate data = hoje();
+            prepararProduto(pao, data, 220);
+            when(fornadaRepository.findByProdutoIdAndData(pao.getId(), data))
+                    .thenReturn(List.of(fornada(150, 2), fornada(70, null)));
+            saveAllDevolveComIds();
+
+            fechamentoService.registrarLote(lote(data, new FechamentoItemRequest(pao.getId(), 20, null, null, null)));
+
+            verify(fechamentoRepository).saveAll(loteCaptor.capture());
+            // (2 × 28,00 + 70 × 0,35) ÷ 220 = 80,50 ÷ 220 = 0,3659 → 0,37
+            assertThat(loteCaptor.getValue().get(0).getCustoUnitario()).isEqualByComparingTo("0.37");
+        }
+
+        @Test
+        @DisplayName("produto de produção própria: usa o custo do cadastro, sem consultar as fornadas")
+        void producaoPropriaUsaCadastro() {
+            Produto sonho = produto("Sonho", "2.00", true);
+            LocalDate data = hoje();
+            prepararProduto(sonho, data, 40);
+            saveAllDevolveComIds();
+
+            fechamentoService.registrarLote(lote(data, new FechamentoItemRequest(sonho.getId(), 5, null, null, null)));
+
+            verify(fornadaRepository, never()).findByProdutoIdAndData(any(), any());
+            verify(fechamentoRepository).saveAll(loteCaptor.capture());
+            assertThat(loteCaptor.getValue().get(0).getCustoUnitario()).isEqualByComparingTo("2.00");
         }
 
         @Test

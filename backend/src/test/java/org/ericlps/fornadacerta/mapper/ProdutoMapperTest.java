@@ -48,7 +48,7 @@ class ProdutoMapperTest {
     @DisplayName("toEntity copia só nome e preço: custo, origem e receita ficam com a ficha técnica")
     void toEntityCopiaCampos() {
         Produto produto = mapper.toEntity(new ProdutoRequest("Pão francês", new BigDecimal("0.80"),
-                OrigemProduto.FORNECEDOR, 80, List.of(new ItemReceitaRequest(UUID.randomUUID(), BigDecimal.ONE))));
+                OrigemProduto.FORNECEDOR, 80, List.of(new ItemReceitaRequest(UUID.randomUUID(), BigDecimal.ONE)), null));
 
         assertThat(produto.getNome()).isEqualTo("Pão francês");
         assertThat(produto.getPreco()).isEqualByComparingTo("0.80");
@@ -61,7 +61,7 @@ class ProdutoMapperTest {
     @DisplayName("toEntity cria produto novo: sem id e ativo")
     void toEntityProdutoNovo() {
         Produto produto = mapper.toEntity(new ProdutoRequest("Sonho", new BigDecimal("6.50"),
-                OrigemProduto.PRODUCAO_PROPRIA, 20, List.of()));
+                OrigemProduto.PRODUCAO_PROPRIA, 20, List.of(), null));
 
         assertThat(produto.getId()).isNull();
         assertThat(produto.getStatus()).isTrue();

@@ -39,9 +39,9 @@ class SugestaoControllerTest {
     void comData() throws Exception {
         when(sugestaoService.sugerir(SEGUNDA)).thenReturn(List.of(
                 new SugestaoResponse(UUID.randomUUID(), "Pão francês", SEGUNDA, "segunda-feira",
-                        CriterioSugestao.MESMO_DIA_DA_SEMANA, 4, new BigDecimal("100.0"), 110, null),
+                        CriterioSugestao.MESMO_DIA_DA_SEMANA, 4, new BigDecimal("100.0"), 110, null, null),
                 new SugestaoResponse(UUID.randomUUID(), "Croissant", SEGUNDA, "segunda-feira",
-                        CriterioSugestao.SEM_HISTORICO, 0, null, null, "Ainda não há dias fechados suficientes.")));
+                        CriterioSugestao.SEM_HISTORICO, 0, null, null, "Ainda não há dias fechados suficientes.", null)));
 
         mockMvc.perform(get("/sugestao").param("data", "2026-11-16"))
                 .andExpect(status().isOk())

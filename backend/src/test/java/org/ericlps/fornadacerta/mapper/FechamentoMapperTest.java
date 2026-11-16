@@ -49,7 +49,7 @@ class FechamentoMapperTest {
     void toEntityCopiaTudo() {
         Produto produto = produto("Pão francês", "0.40");
 
-        Fechamento fechamento = mapper.toEntity(new FechamentoItemRequest(produto.getId(), 30, 10, 5, null), produto, DATA);
+        Fechamento fechamento = mapper.toEntity(new FechamentoItemRequest(produto.getId(), 30, 10, 5, null), produto, DATA, produto.getCusto());
 
         assertThat(fechamento.getId()).isNull();
         assertThat(fechamento.getProduto()).isSameAs(produto);
@@ -66,7 +66,7 @@ class FechamentoMapperTest {
     void toEntityAusentesViramZero() {
         Produto produto = produto("Sonho", "2.00");
 
-        Fechamento fechamento = mapper.toEntity(new FechamentoItemRequest(produto.getId(), 4, null, null, null), produto, DATA);
+        Fechamento fechamento = mapper.toEntity(new FechamentoItemRequest(produto.getId(), 4, null, null, null), produto, DATA, produto.getCusto());
 
         assertThat(fechamento.getQtdDoada()).isZero();
         assertThat(fechamento.getQtdReaproveitada()).isZero();
@@ -78,7 +78,7 @@ class FechamentoMapperTest {
         Produto produto = produto("Croissant", "3.00");
 
         Fechamento fechamento = mapper.toEntity(
-                new FechamentoItemRequest(produto.getId(), 0, null, null, LocalTime.of(10, 30)), produto, DATA);
+                new FechamentoItemRequest(produto.getId(), 0, null, null, LocalTime.of(10, 30)), produto, DATA, produto.getCusto());
 
         assertThat(fechamento.getHorarioEsgotou()).isEqualTo(LocalTime.of(10, 30));
     }
@@ -87,7 +87,7 @@ class FechamentoMapperTest {
     @DisplayName("o custo é uma cópia: mudar o produto depois não altera o fechamento")
     void custoEhCopia() {
         Produto produto = produto("Pão francês", "0.40");
-        Fechamento fechamento = mapper.toEntity(new FechamentoItemRequest(produto.getId(), 30, null, null, null), produto, DATA);
+        Fechamento fechamento = mapper.toEntity(new FechamentoItemRequest(produto.getId(), 30, null, null, null), produto, DATA, produto.getCusto());
 
         produto.setCusto(new BigDecimal("0.55"));
 

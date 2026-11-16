@@ -70,6 +70,7 @@ class ProdutoServiceTest {
         farinha = insumo("Farinha de trigo", UnidadeMedida.KG, "5.00");
         ovo = insumo("Ovo", UnidadeMedida.UN, "0.80");
         sacoMassa = insumo("Saco de massa", UnidadeMedida.SACO, "48.00");
+        sacoMassa.setItensPorSaco(80);
     }
 
     private Insumo insumo(String nome, UnidadeMedida unidade, String custo) {
@@ -100,7 +101,7 @@ class ProdutoServiceTest {
     }
 
     private ProdutoPatchRequest patch(String nome, String preco, Boolean status) {
-        return new ProdutoPatchRequest(nome, preco == null ? null : new BigDecimal(preco), status, null, null, null);
+        return new ProdutoPatchRequest(nome, preco == null ? null : new BigDecimal(preco), status, null, null, null, null);
     }
 
     // =====================================================================
@@ -122,7 +123,7 @@ class ProdutoServiceTest {
 
             ProdutoResponse response = produtoService.cadastrarProduto(new ProdutoRequest("Rosca",
                     new BigDecimal("2.50"), OrigemProduto.PRODUCAO_PROPRIA, 12,
-                    List.of(item(farinha, "1"), item(ovo, "2"))));
+                    List.of(item(farinha, "1"), item(ovo, "2")), null));
 
             assertThat(response.id()).isEqualTo(idGerado);
             assertThat(response.nome()).isEqualTo("Rosca");
@@ -140,7 +141,7 @@ class ProdutoServiceTest {
             when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
 
             produtoService.cadastrarProduto(new ProdutoRequest("Pão francês", new BigDecimal("0.80"),
-                    OrigemProduto.FORNECEDOR, 80, List.of(item(sacoMassa, "1"))));
+                    OrigemProduto.FORNECEDOR, 80, List.of(item(sacoMassa, "1")), null));
 
             ArgumentCaptor<Produto> captor = ArgumentCaptor.forClass(Produto.class);
             verify(produtoRepository).save(captor.capture());
@@ -156,12 +157,41 @@ class ProdutoServiceTest {
         }
 
         @Test
+        @DisplayName("fornecedor sem rendimento no pedido: usa os itens por saco do cadastro do saco")
+        void fornecedorSemRendimento() {
+            when(produtoRepository.existsByNomeIgnoreCase("Pão francês")).thenReturn(false);
+            insumosExistem(sacoMassa);
+            when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+
+            ProdutoResponse response = produtoService.cadastrarProduto(new ProdutoRequest("Pão francês",
+                    new BigDecimal("0.80"), OrigemProduto.FORNECEDOR, null, List.of(item(sacoMassa, "1")), null));
+
+            assertThat(response.rendimento()).isEqualTo(80);
+            assertThat(response.custo()).isEqualByComparingTo("0.60");
+        }
+
+        @Test
+        @DisplayName("bolo vendido em fatias: devolve as fatias e o custo por fatia")
+        void vendidoEmFatias() {
+            when(produtoRepository.existsByNomeIgnoreCase("Bolo de fubá")).thenReturn(false);
+            insumosExistem(farinha, ovo);
+            when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+
+            ProdutoResponse response = produtoService.cadastrarProduto(new ProdutoRequest("Bolo de fubá",
+                    new BigDecimal("4.00"), OrigemProduto.PRODUCAO_PROPRIA, 1,
+                    List.of(item(farinha, "1"), item(ovo, "2")), 12));
+
+            assertThat(response.fatias()).isEqualTo(12);
+            assertThat(response.custo()).isEqualByComparingTo("0.55"); // 6,60 ÷ 12 fatias
+        }
+
+        @Test
         @DisplayName("com nome já existente: 409 sem olhar insumos e sem salvar")
         void nomeDuplicado() {
             when(produtoRepository.existsByNomeIgnoreCase("Baguete")).thenReturn(true);
 
             assertThatThrownBy(() -> produtoService.cadastrarProduto(new ProdutoRequest("Baguete",
-                    new BigDecimal("9.90"), OrigemProduto.PRODUCAO_PROPRIA, 10, List.of(item(farinha, "1")))))
+                    new BigDecimal("9.90"), OrigemProduto.PRODUCAO_PROPRIA, 10, List.of(item(farinha, "1")), null)))
                     .isInstanceOf(ConflitoException.class)
                     .hasMessageContaining("Baguete");
 
@@ -176,7 +206,7 @@ class ProdutoServiceTest {
             insumosExistem(farinha);
 
             assertThatThrownBy(() -> produtoService.cadastrarProduto(new ProdutoRequest("Pão francês",
-                    new BigDecimal("0.80"), OrigemProduto.FORNECEDOR, 80, List.of(item(farinha, "1")))))
+                    new BigDecimal("0.80"), OrigemProduto.FORNECEDOR, 80, List.of(item(farinha, "1")), null)))
                     .isInstanceOf(RegraDeNegocioException.class);
 
             verify(produtoRepository, never()).save(any());
@@ -189,7 +219,7 @@ class ProdutoServiceTest {
             insumosExistem();
 
             assertThatThrownBy(() -> produtoService.cadastrarProduto(new ProdutoRequest("Rosca",
-                    new BigDecimal("2.50"), OrigemProduto.PRODUCAO_PROPRIA, 12, List.of(item(farinha, "1")))))
+                    new BigDecimal("2.50"), OrigemProduto.PRODUCAO_PROPRIA, 12, List.of(item(farinha, "1")), null)))
                     .isInstanceOf(RecursoNaoEncontradoException.class);
 
             verify(produtoRepository, never()).save(any());
@@ -315,7 +345,7 @@ class ProdutoServiceTest {
             insumosExistem(sacoMassa);
 
             ProdutoResponse response = produtoService.atualizarParcialmente(id, new ProdutoPatchRequest(
-                    null, null, null, OrigemProduto.FORNECEDOR, 80, List.of(item(sacoMassa, "1"))));
+                    null, null, null, OrigemProduto.FORNECEDOR, 80, List.of(item(sacoMassa, "1")), null));
 
             assertThat(response.origem()).isEqualTo(OrigemProduto.FORNECEDOR);
             assertThat(response.rendimento()).isEqualTo(80);
@@ -324,17 +354,41 @@ class ProdutoServiceTest {
         }
 
         @Test
+        @DisplayName("ficha de fornecedor sem rendimento: é completa, o rendimento vem do saco")
+        void fichaFornecedorSemRendimento() {
+            produtoExiste();
+            insumosExistem(sacoMassa);
+
+            ProdutoResponse response = produtoService.atualizarParcialmente(id, new ProdutoPatchRequest(
+                    null, null, null, OrigemProduto.FORNECEDOR, null, List.of(item(sacoMassa, "1")), null));
+
+            assertThat(response.rendimento()).isEqualTo(80);
+        }
+
+        @Test
+        @DisplayName("só fatias, sem o resto da ficha: 422")
+        void soFatias() {
+            produtoExiste();
+
+            assertThatThrownBy(() -> produtoService.atualizarParcialmente(id,
+                    new ProdutoPatchRequest(null, null, null, null, null, null, 8)))
+                    .isInstanceOf(RegraDeNegocioException.class);
+
+            assertThat(existente.getFatias()).isNull();
+        }
+
+        @Test
         @DisplayName("ficha técnica pela metade (só rendimento ou só itens): 422 sem mexer na receita")
         void fichaIncompleta() {
             produtoExiste();
 
             assertThatThrownBy(() -> produtoService.atualizarParcialmente(id,
-                    new ProdutoPatchRequest(null, null, null, null, 20, null)))
+                    new ProdutoPatchRequest(null, null, null, null, 20, null, null)))
                     .isInstanceOf(RegraDeNegocioException.class)
                     .hasMessageContaining("juntos");
             assertThatThrownBy(() -> produtoService.atualizarParcialmente(id,
                     new ProdutoPatchRequest(null, null, null, OrigemProduto.PRODUCAO_PROPRIA, null,
-                            List.of(item(farinha, "1")))))
+                            List.of(item(farinha, "1")), null)))
                     .isInstanceOf(RegraDeNegocioException.class);
 
             verifyNoInteractions(insumoRepository);

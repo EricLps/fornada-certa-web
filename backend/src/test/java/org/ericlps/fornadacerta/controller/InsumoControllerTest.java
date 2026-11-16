@@ -45,7 +45,7 @@ class InsumoControllerTest {
     private InsumoService insumoService;
 
     private static InsumoResponse leite(UUID id) {
-        return new InsumoResponse(id, "Leite", UnidadeMedida.L, new BigDecimal("5.89"));
+        return new InsumoResponse(id, "Leite", UnidadeMedida.L, new BigDecimal("5.89"), null);
     }
 
     // =====================================================================
@@ -114,6 +114,23 @@ class InsumoControllerTest {
             }
 
             verify(insumoService, never()).cadastrar(any());
+        }
+
+        @Test
+        @DisplayName("saco com itens por saco: repassa; zero ou negativo é 400 com erros.itensPorSaco")
+        void itensPorSaco() throws Exception {
+            when(insumoService.cadastrar(any(InsumoRequest.class))).thenReturn(leite(UUID.randomUUID()));
+
+            postJson("{ \"nome\": \"Saco\", \"unidade\": \"SACO\", \"custoUnitario\": 28, \"itensPorSaco\": 80 }", 201);
+
+            ArgumentCaptor<InsumoRequest> captor = ArgumentCaptor.forClass(InsumoRequest.class);
+            verify(insumoService).cadastrar(captor.capture());
+            assertThat(captor.getValue().itensPorSaco()).isEqualTo(80);
+
+            mockMvc.perform(post("/insumo").contentType(MediaType.APPLICATION_JSON)
+                            .content("{ \"nome\": \"Saco\", \"unidade\": \"SACO\", \"custoUnitario\": 28, \"itensPorSaco\": 0 }"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.erros.itensPorSaco").isNotEmpty());
         }
 
         @Test

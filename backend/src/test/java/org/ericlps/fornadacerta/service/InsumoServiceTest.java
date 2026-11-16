@@ -7,6 +7,7 @@ import org.ericlps.fornadacerta.dto.InsumoResponse;
 import org.ericlps.fornadacerta.entity.Insumo;
 import org.ericlps.fornadacerta.entity.ItemReceita;
 import org.ericlps.fornadacerta.entity.Produto;
+import org.ericlps.fornadacerta.entity.enums.OrigemProduto;
 import org.ericlps.fornadacerta.entity.enums.UnidadeMedida;
 import org.ericlps.fornadacerta.exception.ConflitoException;
 import org.ericlps.fornadacerta.exception.RecursoNaoEncontradoException;
@@ -86,7 +87,7 @@ class InsumoServiceTest {
             });
 
             InsumoResponse response = insumoService.cadastrar(
-                    new InsumoRequest("Leite", UnidadeMedida.L, new BigDecimal("5.89")));
+                    new InsumoRequest("Leite", UnidadeMedida.L, new BigDecimal("5.89"), null));
 
             assertThat(response.id()).isEqualTo(idGerado);
             assertThat(response.nome()).isEqualTo("Leite");
@@ -100,7 +101,7 @@ class InsumoServiceTest {
             when(insumoRepository.existsByNomeIgnoreCase("Ovo")).thenReturn(false);
             when(insumoRepository.save(any(Insumo.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
 
-            insumoService.cadastrar(new InsumoRequest("Ovo", UnidadeMedida.UN, new BigDecimal("0.80")));
+            insumoService.cadastrar(new InsumoRequest("Ovo", UnidadeMedida.UN, new BigDecimal("0.80"), null));
 
             ArgumentCaptor<Insumo> captor = ArgumentCaptor.forClass(Insumo.class);
             verify(insumoRepository).save(captor.capture());
@@ -109,12 +110,48 @@ class InsumoServiceTest {
         }
 
         @Test
+        @DisplayName("saco: guarda quantos itens vêm em cada saco")
+        void saco() {
+            when(insumoRepository.existsByNomeIgnoreCase("Saco de massa")).thenReturn(false);
+            when(insumoRepository.save(any(Insumo.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+
+            InsumoResponse response = insumoService.cadastrar(
+                    new InsumoRequest("Saco de massa", UnidadeMedida.SACO, new BigDecimal("28.00"), 80));
+
+            assertThat(response.itensPorSaco()).isEqualTo(80);
+        }
+
+        @Test
+        @DisplayName("saco sem itens por saco: 422 e não salva")
+        void sacoSemItens() {
+            when(insumoRepository.existsByNomeIgnoreCase("Saco de massa")).thenReturn(false);
+
+            assertThatThrownBy(() -> insumoService.cadastrar(
+                    new InsumoRequest("Saco de massa", UnidadeMedida.SACO, new BigDecimal("28.00"), null)))
+                    .isInstanceOf(RegraDeNegocioException.class);
+
+            verify(insumoRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("itens por saco em ingrediente comum: descartado")
+        void itensEmIngrediente() {
+            when(insumoRepository.existsByNomeIgnoreCase("Ovo")).thenReturn(false);
+            when(insumoRepository.save(any(Insumo.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+
+            InsumoResponse response = insumoService.cadastrar(
+                    new InsumoRequest("Ovo", UnidadeMedida.UN, new BigDecimal("0.80"), 12));
+
+            assertThat(response.itensPorSaco()).isNull();
+        }
+
+        @Test
         @DisplayName("nome já existente: 409 e não salva")
         void nomeDuplicado() {
             when(insumoRepository.existsByNomeIgnoreCase("leite")).thenReturn(true);
 
             assertThatThrownBy(() -> insumoService.cadastrar(
-                    new InsumoRequest("leite", UnidadeMedida.L, new BigDecimal("5.89"))))
+                    new InsumoRequest("leite", UnidadeMedida.L, new BigDecimal("5.89"), null)))
                     .isInstanceOf(ConflitoException.class)
                     .hasMessage("Já existe um insumo cadastrado como: leite");
 
@@ -183,7 +220,7 @@ class InsumoServiceTest {
             when(insumoRepository.existsByNomeIgnoreCaseAndIdNot("Farinha especial", id)).thenReturn(false);
 
             InsumoResponse response = insumoService.atualizarParcialmente(id,
-                    new InsumoPatchRequest("Farinha especial", null, null));
+                    new InsumoPatchRequest("Farinha especial", null, null, null));
 
             assertThat(response.nome()).isEqualTo("Farinha especial");
             assertThat(response.custoUnitario()).isEqualByComparingTo("5.00");
@@ -196,7 +233,7 @@ class InsumoServiceTest {
             insumoExiste();
             when(insumoRepository.existsByNomeIgnoreCaseAndIdNot("Leite", id)).thenReturn(true);
 
-            assertThatThrownBy(() -> insumoService.atualizarParcialmente(id, new InsumoPatchRequest("Leite", null, null)))
+            assertThatThrownBy(() -> insumoService.atualizarParcialmente(id, new InsumoPatchRequest("Leite", null, null, null)))
                     .isInstanceOf(ConflitoException.class);
 
             assertThat(farinha.getNome()).isEqualTo("Farinha de trigo");
@@ -210,7 +247,7 @@ class InsumoServiceTest {
             when(produtoRepository.findUsandoInsumo(id)).thenReturn(List.of(pao));
 
             InsumoResponse response = insumoService.atualizarParcialmente(id,
-                    new InsumoPatchRequest(null, null, new BigDecimal("6.50")));
+                    new InsumoPatchRequest(null, null, new BigDecimal("6.50"), null));
 
             assertThat(response.custoUnitario()).isEqualByComparingTo("6.50");
             assertThat(pao.getCusto()).isEqualByComparingTo("1.30"); // 2 kg x 6,50 / 10
@@ -221,7 +258,7 @@ class InsumoServiceTest {
         void custoIgual() {
             insumoExiste();
 
-            insumoService.atualizarParcialmente(id, new InsumoPatchRequest(null, null, new BigDecimal("5")));
+            insumoService.atualizarParcialmente(id, new InsumoPatchRequest(null, null, new BigDecimal("5"), null));
 
             verify(produtoRepository, never()).findUsandoInsumo(any());
         }
@@ -233,9 +270,54 @@ class InsumoServiceTest {
             when(itemReceitaRepository.existsByInsumoId(id)).thenReturn(false);
 
             InsumoResponse response = insumoService.atualizarParcialmente(id,
-                    new InsumoPatchRequest(null, UnidadeMedida.SACO, null));
+                    new InsumoPatchRequest(null, UnidadeMedida.SACO, null, 80));
 
             assertThat(response.unidade()).isEqualTo(UnidadeMedida.SACO);
+            assertThat(response.itensPorSaco()).isEqualTo(80);
+        }
+
+        @Test
+        @DisplayName("virar SACO sem informar itens por saco: 422")
+        void viraSacoSemItens() {
+            insumoExiste();
+            when(itemReceitaRepository.existsByInsumoId(id)).thenReturn(false);
+
+            assertThatThrownBy(() -> insumoService.atualizarParcialmente(id,
+                    new InsumoPatchRequest(null, UnidadeMedida.SACO, null, null)))
+                    .isInstanceOf(RegraDeNegocioException.class)
+                    .hasMessageContaining("itens");
+        }
+
+        @Test
+        @DisplayName("itens por saco em insumo que não é saco: ignorado (fica nulo)")
+        void itensPorSacoForaDeSaco() {
+            insumoExiste();
+
+            InsumoResponse response = insumoService.atualizarParcialmente(id, new InsumoPatchRequest(null, null, null, 30));
+
+            assertThat(response.itensPorSaco()).isNull();
+        }
+
+        @Test
+        @DisplayName("saco passa a vir com menos itens: o custo dos produtos de fornecedor sobe")
+        void sacoComMenosItens() {
+            Insumo saco = insumo(id, "Saco de massa", UnidadeMedida.SACO, "48.00");
+            saco.setItensPorSaco(80);
+            when(insumoRepository.findById(id)).thenReturn(Optional.of(saco));
+            Produto pao = new Produto();
+            pao.setNome("Pão francês");
+            pao.setPreco(new BigDecimal("0.80"));
+            pao.setOrigem(OrigemProduto.FORNECEDOR);
+            pao.setRendimento(80);
+            pao.getReceita().add(new ItemReceita(pao, saco, BigDecimal.ONE));
+            pao.setCusto(new BigDecimal("0.60"));
+            when(produtoRepository.findUsandoInsumo(id)).thenReturn(List.of(pao));
+
+            InsumoResponse response = insumoService.atualizarParcialmente(id, new InsumoPatchRequest(null, null, null, 60));
+
+            assertThat(response.itensPorSaco()).isEqualTo(60);
+            assertThat(pao.getRendimento()).isEqualTo(60);
+            assertThat(pao.getCusto()).isEqualByComparingTo("0.80"); // 48,00 ÷ 60
         }
 
         @Test
@@ -245,7 +327,7 @@ class InsumoServiceTest {
             when(itemReceitaRepository.existsByInsumoId(id)).thenReturn(true);
 
             assertThatThrownBy(() -> insumoService.atualizarParcialmente(id,
-                    new InsumoPatchRequest(null, UnidadeMedida.UN, null)))
+                    new InsumoPatchRequest(null, UnidadeMedida.UN, null, null)))
                     .isInstanceOf(RegraDeNegocioException.class)
                     .hasMessageContaining("Farinha de trigo");
 
@@ -257,7 +339,7 @@ class InsumoServiceTest {
         void mesmaUnidade() {
             insumoExiste();
 
-            insumoService.atualizarParcialmente(id, new InsumoPatchRequest(null, UnidadeMedida.KG, null));
+            insumoService.atualizarParcialmente(id, new InsumoPatchRequest(null, UnidadeMedida.KG, null, null));
 
             verify(itemReceitaRepository, never()).existsByInsumoId(any());
         }
@@ -267,7 +349,7 @@ class InsumoServiceTest {
         void nada() {
             insumoExiste();
 
-            InsumoResponse response = insumoService.atualizarParcialmente(id, new InsumoPatchRequest(null, null, null));
+            InsumoResponse response = insumoService.atualizarParcialmente(id, new InsumoPatchRequest(null, null, null, null));
 
             assertThat(response.nome()).isEqualTo("Farinha de trigo");
             verify(insumoRepository, never()).existsByNomeIgnoreCaseAndIdNot(anyString(), any());
@@ -279,7 +361,7 @@ class InsumoServiceTest {
         void inexistente() {
             when(insumoRepository.findById(id)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> insumoService.atualizarParcialmente(id, new InsumoPatchRequest("X", null, null)))
+            assertThatThrownBy(() -> insumoService.atualizarParcialmente(id, new InsumoPatchRequest("X", null, null, null)))
                     .isInstanceOf(RecursoNaoEncontradoException.class)
                     .hasMessage("Insumo não encontrado");
         }

@@ -59,7 +59,7 @@ class ProdutoControllerTest {
 
     private static ProdutoResponse response(UUID id, String nome, String preco, String custo, boolean ativo) {
         return new ProdutoResponse(id, nome, new BigDecimal(preco), new BigDecimal(custo), ativo,
-                OrigemProduto.PRODUCAO_PROPRIA, 10);
+                OrigemProduto.PRODUCAO_PROPRIA, 10, null);
     }
 
     // Monta um JSON de cadastro; passe null para deixar um campo de fora
@@ -94,7 +94,7 @@ class ProdutoControllerTest {
             UUID id = UUID.randomUUID();
             when(produtoService.cadastrarProduto(any(ProdutoRequest.class)))
                     .thenReturn(new ProdutoResponse(id, "Pão francês", new BigDecimal("0.80"), new BigDecimal("0.60"),
-                            true, OrigemProduto.FORNECEDOR, 80));
+                            true, OrigemProduto.FORNECEDOR, 80, null));
 
             mockMvc.perform(post("/produto").contentType(MediaType.APPLICATION_JSON).content(cadastroValido()))
                     .andExpect(status().isCreated())
@@ -163,9 +163,9 @@ class ProdutoControllerTest {
         }
 
         @Test
-        @DisplayName("rendimento ausente, zero ou negativo: 400 com erros.rendimento")
+        @DisplayName("rendimento zero ou negativo: 400 com erros.rendimento")
         void rendimentoInvalido() throws Exception {
-            for (String rendimento : new String[]{null, "0", "-3"}) {
+            for (String rendimento : new String[]{"0", "-3"}) {
                 mockMvc.perform(post("/produto").contentType(MediaType.APPLICATION_JSON)
                                 .content(cadastroJson("\"Pão\"", "0.80", "\"FORNECEDOR\"", rendimento, ITENS_OK)))
                         .andExpect(status().isBadRequest())
@@ -174,6 +174,40 @@ class ProdutoControllerTest {
             }
 
             verify(produtoService, never()).cadastrarProduto(any());
+        }
+
+        @Test
+        @DisplayName("rendimento ausente: passa pela validação (fornecedor usa o do saco; a regra fica no service)")
+        void rendimentoAusente() throws Exception {
+            when(produtoService.cadastrarProduto(any(ProdutoRequest.class)))
+                    .thenReturn(response(UUID.randomUUID(), "Pão", "0.80", "0.35", true));
+
+            postJson(cadastroJson("\"Pão\"", "0.80", "\"FORNECEDOR\"", null, ITENS_OK), 201);
+
+            ArgumentCaptor<ProdutoRequest> captor = ArgumentCaptor.forClass(ProdutoRequest.class);
+            verify(produtoService).cadastrarProduto(captor.capture());
+            assertThat(captor.getValue().rendimento()).isNull();
+            assertThat(captor.getValue().fatias()).isNull();
+        }
+
+        @Test
+        @DisplayName("fatias: repassa ao service; menos de 2 fatias é 400 com erros.fatias")
+        void fatias() throws Exception {
+            when(produtoService.cadastrarProduto(any(ProdutoRequest.class)))
+                    .thenReturn(response(UUID.randomUUID(), "Bolo", "4.00", "0.55", true));
+
+            postJson("{ \"nome\": \"Bolo\", \"preco\": 4.00, \"origem\": \"PRODUCAO_PROPRIA\", \"rendimento\": 1,"
+                    + " \"itens\": " + ITENS_OK + ", \"fatias\": 12 }", 201);
+
+            ArgumentCaptor<ProdutoRequest> captor = ArgumentCaptor.forClass(ProdutoRequest.class);
+            verify(produtoService).cadastrarProduto(captor.capture());
+            assertThat(captor.getValue().fatias()).isEqualTo(12);
+
+            mockMvc.perform(post("/produto").contentType(MediaType.APPLICATION_JSON)
+                            .content("{ \"nome\": \"Bolo\", \"preco\": 4.00, \"origem\": \"PRODUCAO_PROPRIA\", \"rendimento\": 1,"
+                                    + " \"itens\": " + ITENS_OK + ", \"fatias\": 1 }"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.erros.fatias").isNotEmpty());
         }
 
         @Test
@@ -308,7 +342,7 @@ class ProdutoControllerTest {
         void existente() throws Exception {
             UUID id = UUID.randomUUID();
             when(produtoService.detalhar(id)).thenReturn(new ProdutoDetalheResponse(id, "Bolo", new BigDecimal("4.00"),
-                    new BigDecimal("1.20"), true, OrigemProduto.PRODUCAO_PROPRIA, 10, List.of(
+                    new BigDecimal("1.20"), true, OrigemProduto.PRODUCAO_PROPRIA, 10, null, List.of(
                     new ItemReceitaResponse(INSUMO, "Fubá", UnidadeMedida.KG, new BigDecimal("0.500"),
                             new BigDecimal("4.90"), new BigDecimal("2.45")))));
 
