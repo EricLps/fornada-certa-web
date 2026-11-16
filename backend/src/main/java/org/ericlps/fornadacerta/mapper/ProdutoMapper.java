@@ -65,8 +65,8 @@ public class ProdutoMapper {
                 item.getInsumo().getNome(),
                 item.getInsumo().getUnidade(),
                 item.getQuantidade(),
-                item.getInsumo().getCustoUnitario(),
-                item.getQuantidade().multiply(item.getInsumo().getCustoUnitario()).setScale(2, RoundingMode.HALF_UP)
+                item.getInsumo().custoPorUnidadeDeUso().setScale(2, RoundingMode.HALF_UP),
+                item.getQuantidade().multiply(item.getInsumo().custoPorUnidadeDeUso()).setScale(2, RoundingMode.HALF_UP)
         );
     }
 

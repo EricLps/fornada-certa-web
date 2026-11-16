@@ -7,6 +7,7 @@ import lombok.Setter;
 import org.ericlps.fornadacerta.entity.enums.UnidadeMedida;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.UUID;
 
 @Entity
@@ -30,5 +31,14 @@ public class Insumo {
     private BigDecimal custoUnitario;
 
     private Integer itensPorSaco;
+
+    private Integer fornadasPorBotijao;
+
+    public BigDecimal custoPorUnidadeDeUso() {
+        if (unidade == UnidadeMedida.GAS && fornadasPorBotijao != null) {
+            return custoUnitario.divide(BigDecimal.valueOf(fornadasPorBotijao), 4, RoundingMode.HALF_UP);
+        }
+        return custoUnitario;
+    }
 
 }

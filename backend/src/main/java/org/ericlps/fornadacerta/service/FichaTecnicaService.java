@@ -48,10 +48,16 @@ public class FichaTecnicaService {
         }
 
         if (origem == OrigemProduto.FORNECEDOR) {
-            Insumo saco = insumos.get(itens.getFirst().insumoId());
-            if (itens.size() != 1 || saco.getUnidade() != UnidadeMedida.SACO) {
-                throw new RegraDeNegocioException("Produto de fornecedor usa exatamente um insumo com unidade SACO.");
+            List<Insumo> sacos = insumos.values().stream()
+                    .filter(insumo -> insumo.getUnidade() == UnidadeMedida.SACO)
+                    .toList();
+            boolean soSacoEGas = insumos.values().stream()
+                    .allMatch(insumo -> insumo.getUnidade() == UnidadeMedida.SACO || insumo.getUnidade() == UnidadeMedida.GAS);
+            if (sacos.size() != 1 || !soSacoEGas) {
+                throw new RegraDeNegocioException(
+                        "Produto de fornecedor usa exatamente um insumo com unidade SACO e, se quiser, o gás.");
             }
+            Insumo saco = sacos.getFirst();
             if (saco.getItensPorSaco() == null) {
                 throw new RegraDeNegocioException("Informe na tela de Insumos quantos itens vêm no " + saco.getNome() + ".");
             }
@@ -88,10 +94,11 @@ public class FichaTecnicaService {
         }
 
         if (produto.getOrigem() == OrigemProduto.FORNECEDOR) {
-            Integer itensPorSaco = produto.getReceita().getFirst().getInsumo().getItensPorSaco();
-            if (itensPorSaco != null) {
-                produto.setRendimento(itensPorSaco);
-            }
+            produto.getReceita().stream()
+                    .map(ItemReceita::getInsumo)
+                    .filter(insumo -> insumo.getUnidade() == UnidadeMedida.SACO && insumo.getItensPorSaco() != null)
+                    .findFirst()
+                    .ifPresent(saco -> produto.setRendimento(saco.getItensPorSaco()));
         }
 
         if (produto.getRendimento() == null) {
@@ -101,7 +108,7 @@ public class FichaTecnicaService {
         int fatias = (produto.getFatias() != null) ? produto.getFatias() : 1;
 
         List<CalculadoraCusto.Componente> componentes = produto.getReceita().stream()
-                .map(item -> new CalculadoraCusto.Componente(item.getQuantidade(), item.getInsumo().getCustoUnitario()))
+                .map(item -> new CalculadoraCusto.Componente(item.getQuantidade(), item.getInsumo().custoPorUnidadeDeUso()))
                 .toList();
 
         produto.setCusto(calculadoraCusto.custoUnitario(componentes, produto.getRendimento() * fatias));

@@ -12,6 +12,7 @@ public record InsumoRequest(
         @NotBlank @Size(max = 100) String nome,
         @NotNull UnidadeMedida unidade,
         @NotNull @Positive BigDecimal custoUnitario,
-        @Positive Integer itensPorSaco
+        @Positive Integer itensPorSaco,
+        @Positive Integer fornadasPorBotijao
 ) {
 }

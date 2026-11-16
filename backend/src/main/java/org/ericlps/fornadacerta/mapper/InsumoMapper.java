@@ -17,12 +17,13 @@ public class InsumoMapper {
         insumo.setUnidade(request.unidade());
         insumo.setCustoUnitario(request.custoUnitario());
         insumo.setItensPorSaco(request.unidade() == UnidadeMedida.SACO ? request.itensPorSaco() : null);
+        insumo.setFornadasPorBotijao(request.unidade() == UnidadeMedida.GAS ? request.fornadasPorBotijao() : null);
         return insumo;
     }
 
     public InsumoResponse toResponse(Insumo insumo) {
         return new InsumoResponse(insumo.getId(), insumo.getNome(), insumo.getUnidade(), insumo.getCustoUnitario(),
-                insumo.getItensPorSaco());
+                insumo.getItensPorSaco(), insumo.getFornadasPorBotijao());
     }
 
     public List<InsumoResponse> toResponseList(List<Insumo> insumos) {

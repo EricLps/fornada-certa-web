@@ -10,6 +10,7 @@ public record InsumoResponse(
         String nome,
         UnidadeMedida unidade,
         BigDecimal custoUnitario,
-        Integer itensPorSaco
+        Integer itensPorSaco,
+        Integer fornadasPorBotijao
 ) {
 }

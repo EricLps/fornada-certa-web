@@ -5,6 +5,7 @@ public enum UnidadeMedida {
     KG,
     L,
     UN,
-    SACO
+    SACO,
+    GAS
 
 }

@@ -31,6 +31,7 @@ public class InsumoService {
     private final InsumoMapper insumoMapper;
 
     private static final String SEM_ITENS_POR_SACO = "Informe quantos itens vêm em cada saco.";
+    private static final String SEM_FORNADAS_POR_BOTIJAO = "Informe quantas fornadas um botijão rende.";
 
     @Transactional
     public InsumoResponse cadastrar(InsumoRequest request) {
@@ -41,6 +42,10 @@ public class InsumoService {
 
         if (request.unidade() == UnidadeMedida.SACO && request.itensPorSaco() == null) {
             throw new RegraDeNegocioException(SEM_ITENS_POR_SACO);
+        }
+
+        if (request.unidade() == UnidadeMedida.GAS && request.fornadasPorBotijao() == null) {
+            throw new RegraDeNegocioException(SEM_FORNADAS_POR_BOTIJAO);
         }
 
         return insumoMapper.toResponse(insumoRepository.save(insumoMapper.toEntity(request)));
@@ -84,6 +89,17 @@ public class InsumoService {
             insumo.setItensPorSaco(null);
         } else if (insumo.getItensPorSaco() == null) {
             throw new RegraDeNegocioException(SEM_ITENS_POR_SACO);
+        }
+
+        if (request.fornadasPorBotijao() != null && !request.fornadasPorBotijao().equals(insumo.getFornadasPorBotijao())) {
+            insumo.setFornadasPorBotijao(request.fornadasPorBotijao());
+            recalcular = true;
+        }
+
+        if (insumo.getUnidade() != UnidadeMedida.GAS) {
+            insumo.setFornadasPorBotijao(null);
+        } else if (insumo.getFornadasPorBotijao() == null) {
+            throw new RegraDeNegocioException(SEM_FORNADAS_POR_BOTIJAO);
         }
 
         if (request.custoUnitario() != null && request.custoUnitario().compareTo(insumo.getCustoUnitario()) != 0) {

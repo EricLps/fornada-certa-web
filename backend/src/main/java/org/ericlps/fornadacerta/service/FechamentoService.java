@@ -101,7 +101,9 @@ public class FechamentoService {
             return produto.getCusto();
         }
 
-        BigDecimal custoDoSaco = produto.getReceita().getFirst().getInsumo().getCustoUnitario();
+        BigDecimal custoDoSaco = produto.getReceita().stream()
+                .map(item -> item.getQuantidade().multiply(item.getInsumo().custoPorUnidadeDeUso()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal total = BigDecimal.ZERO;
 
         for (Fornada fornada : fornadaRepository.findByProdutoIdAndData(produto.getId(), data)) {
