@@ -4,7 +4,7 @@ import { Component, ElementRef, OnInit, computed, inject, signal, viewChild } fr
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { Observable } from 'rxjs';
-import { Insumo, siglaDaUnidade } from '../../models/insumo';
+import { Insumo, custoPorUso, siglaDaUnidade } from '../../models/insumo';
 import { ItemReceita, OrigemProduto, Produto, ProdutoDetalhe, ProdutoPatch, ProdutoRequest } from '../../models/produto';
 import { tratarErroApi } from '../../services/erro-api';
 import { InsumoService } from '../../services/insumo.service';
@@ -34,6 +34,7 @@ export class Produtos implements OnInit {
   private readonly modal = viewChild.required<ElementRef<HTMLDialogElement>>('modal');
 
   readonly sigla = siglaDaUnidade;
+  readonly custoPorUso = custoPorUso;
 
   readonly filtros: { valor: Filtro; rotulo: string }[] = [
     { valor: 'ativos', rotulo: 'Ativos' },
@@ -63,6 +64,8 @@ export class Produtos implements OnInit {
   readonly origem = signal<OrigemProduto>('PRODUCAO_PROPRIA');
   readonly receita = signal<LinhaReceita[]>([]);
   readonly sacoId = signal<string | null>(null);
+  readonly gasId = signal<string | null>(null);
+  readonly gasQtd = signal<number | null>(null);
   readonly semFicha = signal(false);
   readonly emFatias = signal(false);
 
@@ -85,15 +88,24 @@ export class Produtos implements OnInit {
 
   readonly sacoEscolhido = computed(() => this.sacos().find(s => s.id === this.sacoId()) ?? null);
 
+  readonly gases = computed(() => this.insumos().filter(i => i.unidade === 'GAS'));
+
+  readonly gasEscolhido = computed(() => this.gases().find(g => g.id === this.gasId()) ?? null);
+
   readonly custoDaReceita = computed(() => {
     if (this.origem() === 'FORNECEDOR') {
-      return this.sacos().find(s => s.id === this.sacoId())?.custoUnitario ?? null;
+      const saco = this.sacoEscolhido();
+      if (!saco) {
+        return null;
+      }
+      const gas = this.gasEscolhido();
+      return saco.custoUnitario + (gas ? (this.gasQtd() ?? 0) * custoPorUso(gas) : 0);
     }
     const linhas = this.receita();
     if (linhas.length === 0) {
       return null;
     }
-    return linhas.reduce((total, l) => total + (l.quantidade ?? 0) * l.insumo.custoUnitario, 0);
+    return linhas.reduce((total, l) => total + (l.quantidade ?? 0) * custoPorUso(l.insumo), 0);
   });
 
   readonly form = this.fb.group({
@@ -172,6 +184,18 @@ export class Produtos implements OnInit {
 
   escolherOrigem(origem: OrigemProduto): void {
     this.origem.set(origem);
+  }
+
+  escolherGas(evento: Event): void {
+    const valor = (evento.target as HTMLSelectElement).value;
+    this.gasId.set(valor || null);
+    if (!valor) {
+      this.gasQtd.set(null);
+    }
+  }
+
+  definirGasQtd(evento: Event): void {
+    this.gasQtd.set(this.numero(evento));
   }
 
   alternarFatias(evento: Event): void {
@@ -287,6 +311,9 @@ export class Produtos implements OnInit {
     if (this.origem() === 'FORNECEDOR' && !this.sacoEscolhido()?.itensPorSaco) {
       return 'Esse saco ainda não tem a quantidade de itens. Informe na tela de Insumos.';
     }
+    if (this.origem() === 'FORNECEDOR' && this.gasId() && !(this.gasQtd()! > 0)) {
+      return 'Informe quantas fornadas de gás um saco usa.';
+    }
     const fatias = this.form.controls.fatias.value;
     if (this.emFatias() && (!fatias || fatias < 2 || this.form.controls.fatias.invalid)) {
       return 'Informe em quantas fatias cada unidade é cortada (pelo menos 2).';
@@ -392,7 +419,11 @@ export class Produtos implements OnInit {
 
   private itens(): ItemReceita[] {
     if (this.origem() === 'FORNECEDOR') {
-      return [{ insumoId: this.sacoId()!, quantidade: 1 }];
+      const itens: ItemReceita[] = [{ insumoId: this.sacoId()!, quantidade: 1 }];
+      if (this.gasId() && this.gasQtd()) {
+        itens.push({ insumoId: this.gasId()!, quantidade: this.gasQtd()! });
+      }
+      return itens;
     }
     return this.receita().map(l => ({ insumoId: l.insumo.id, quantidade: l.quantidade! }));
   }
@@ -408,12 +439,22 @@ export class Produtos implements OnInit {
     this.semFicha.set(detalhe.itens.length === 0);
 
     if (detalhe.origem === 'FORNECEDOR') {
-      this.sacoId.set(detalhe.itens[0]?.insumoId ?? null);
+      this.sacoId.set(detalhe.itens.find(i => i.unidade === 'SACO')?.insumoId ?? null);
+      const gas = detalhe.itens.find(i => i.unidade === 'GAS');
+      this.gasId.set(gas?.insumoId ?? null);
+      this.gasQtd.set(gas?.quantidade ?? null);
       return;
     }
 
     this.receita.set(detalhe.itens.map(i => ({
-      insumo: { id: i.insumoId, nome: i.insumoNome, unidade: i.unidade, custoUnitario: i.custoUnitario, itensPorSaco: null },
+      insumo: {
+        id: i.insumoId,
+        nome: i.insumoNome,
+        unidade: i.unidade,
+        custoUnitario: i.custoUnitario,
+        itensPorSaco: null,
+        fornadasPorBotijao: null,
+      },
       quantidade: i.quantidade,
     })));
   }
@@ -422,6 +463,8 @@ export class Produtos implements OnInit {
     this.origem.set('PRODUCAO_PROPRIA');
     this.receita.set([]);
     this.sacoId.set(null);
+    this.gasId.set(null);
+    this.gasQtd.set(null);
     this.semFicha.set(false);
     this.emFatias.set(false);
     this.tentouSalvar.set(false);

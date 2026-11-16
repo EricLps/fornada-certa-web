@@ -2,7 +2,7 @@ import { CurrencyPipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Insumo, InsumoRequest, UNIDADES, UnidadeMedida, siglaDaUnidade } from '../../models/insumo';
+import { Insumo, InsumoRequest, UNIDADES, UnidadeMedida, custoPorUso, siglaDaUnidade } from '../../models/insumo';
 import { tratarErroApi } from '../../services/erro-api';
 import { InsumoService } from '../../services/insumo.service';
 
@@ -23,6 +23,7 @@ export class Insumos implements OnInit {
 
   readonly unidades = UNIDADES;
   readonly sigla = siglaDaUnidade;
+  readonly custoPorUso = custoPorUso;
 
   readonly filtros: { valor: Filtro; rotulo: string }[] = [
     { valor: 'todos', rotulo: 'Todos' },
@@ -54,6 +55,7 @@ export class Insumos implements OnInit {
     unidade: this.fb.control<UnidadeMedida | null>(null, Validators.required),
     custoUnitario: this.fb.control<number | null>(null, [Validators.required, Validators.min(0.01)]),
     itensPorSaco: this.fb.control<number | null>(null, [Validators.min(1), Validators.pattern(/^\d+$/)]),
+    fornadasPorBotijao: this.fb.control<number | null>(null, [Validators.min(1), Validators.pattern(/^\d+$/)]),
   });
 
   ngOnInit(): void {
@@ -89,6 +91,7 @@ export class Insumos implements OnInit {
       unidade: insumo.unidade,
       custoUnitario: insumo.custoUnitario,
       itensPorSaco: insumo.itensPorSaco,
+      fornadasPorBotijao: insumo.fornadasPorBotijao,
     });
     this.limparMensagens();
     this.modo.set('editando');
@@ -103,7 +106,7 @@ export class Insumos implements OnInit {
   }
 
   salvar(): void {
-    if (this.form.invalid || this.faltaItensPorSaco()) {
+    if (this.form.invalid || this.faltaItensPorSaco() || this.faltaFornadasPorBotijao()) {
       this.form.markAllAsTouched();
       return;
     }
@@ -115,6 +118,7 @@ export class Insumos implements OnInit {
     const dados = {
       ...valores,
       itensPorSaco: valores.unidade === 'SACO' ? valores.itensPorSaco : null,
+      fornadasPorBotijao: valores.unidade === 'GAS' ? valores.fornadasPorBotijao : null,
     } as InsumoRequest;
     const atual = this.selecionado();
     const requisicao = atual
@@ -141,10 +145,13 @@ export class Insumos implements OnInit {
 
   rotuloDoCusto(): string {
     const unidade = this.form.controls.unidade.value;
+    if (unidade === 'GAS') {
+      return 'Preço do botijão (R$)';
+    }
     return unidade ? `Custo por ${this.sigla(unidade)} (R$)` : 'Custo por unidade (R$)';
   }
 
-  erroDoCampo(campo: 'nome' | 'unidade' | 'custoUnitario' | 'itensPorSaco'): string | null {
+  erroDoCampo(campo: 'nome' | 'unidade' | 'custoUnitario' | 'itensPorSaco' | 'fornadasPorBotijao'): string | null {
     const doServidor = this.errosCampo()[campo];
     if (doServidor) {
       return doServidor;
@@ -153,6 +160,9 @@ export class Insumos implements OnInit {
     const controle = this.form.controls[campo];
     if (campo === 'itensPorSaco' && controle.touched && this.faltaItensPorSaco()) {
       return 'Informe quantos itens vêm em cada saco.';
+    }
+    if (campo === 'fornadasPorBotijao' && controle.touched && this.faltaFornadasPorBotijao()) {
+      return 'Informe quantas fornadas um botijão rende.';
     }
     if (controle.hasError('pattern')) {
       return 'Use um número inteiro.';
@@ -175,6 +185,11 @@ export class Insumos implements OnInit {
   private faltaItensPorSaco(): boolean {
     const { unidade, itensPorSaco } = this.form.getRawValue();
     return unidade === 'SACO' && !itensPorSaco;
+  }
+
+  private faltaFornadasPorBotijao(): boolean {
+    const { unidade, fornadasPorBotijao } = this.form.getRawValue();
+    return unidade === 'GAS' && !fornadasPorBotijao;
   }
 
   private limparMensagens(): void {

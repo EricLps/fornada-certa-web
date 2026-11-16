@@ -169,6 +169,23 @@
               @if (sacoEscolhido() && !sacoEscolhido()!.itensPorSaco) {
                 <span class="dica">Esse saco ainda não tem a quantidade de itens. <a routerLink="/insumos">Informe em Insumos</a>.</span>
               }
+              <div class="linha">
+                <div class="campo campo-largo">
+                  <label for="gas">Gás (opcional)</label>
+                  <select id="gas" [value]="gasId() ?? ''" (change)="escolherGas($event)">
+                    <option value="">Sem gás</option>
+                    @for (gs of gases(); track gs.id) {
+                      <option [value]="gs.id" [selected]="gs.id === gasId()">{{ gs.nome }} · {{ custoPorUso(gs) | currency:'BRL' }} por fornada</option>
+                    }
+                  </select>
+                </div>
+                @if (gasId()) {
+                  <div class="campo">
+                    <label for="gas-qtd">Fornadas de gás por saco</label>
+                    <input id="gas-qtd" type="number" step="0.001" min="0" placeholder="Ex.: 1" [value]="gasQtd() ?? ''" (input)="definirGasQtd($event)">
+                  </div>
+                }
+              </div>
             } @else {
               <div class="linha">
                 <div class="campo campo-curto">
@@ -207,7 +224,7 @@
                               <span>{{ sigla(l.insumo.unidade) }}</span>
                             </div>
                           </td>
-                          <td class="num">{{ (l.quantidade ?? 0) * l.insumo.custoUnitario | currency:'BRL' }}</td>
+                          <td class="num">{{ (l.quantidade ?? 0) * custoPorUso(l.insumo) | currency:'BRL' }}</td>
                           <td class="num">
                             <button type="button" class="btn-icone btn-icone-pequeno" [attr.aria-label]="'Remover ' + l.insumo.nome" title="Remover" (click)="removerLinha(l.insumo.id)">
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
@@ -290,7 +307,7 @@
           <input type="checkbox" [checked]="marcadoNoModal(i.id)" (change)="alternarNoModal(i)">
           <span>
             {{ i.nome }}
-            <small>{{ i.custoUnitario | currency:'BRL' }} por {{ sigla(i.unidade) }}</small>
+            <small>{{ custoPorUso(i) | currency:'BRL' }} por {{ sigla(i.unidade) }}</small>
           </span>
         </label>
         @if (marcadoNoModal(i.id)) {

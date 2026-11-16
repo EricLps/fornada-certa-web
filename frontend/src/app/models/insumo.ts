@@ -1,4 +1,4 @@
-export type UnidadeMedida = 'KG' | 'L' | 'UN' | 'SACO';
+export type UnidadeMedida = 'KG' | 'L' | 'UN' | 'SACO' | 'GAS';
 
 export interface Insumo {
   id: string;
@@ -6,6 +6,7 @@ export interface Insumo {
   unidade: UnidadeMedida;
   custoUnitario: number;
   itensPorSaco: number | null;
+  fornadasPorBotijao: number | null;
 }
 
 export interface InsumoRequest {
@@ -13,6 +14,7 @@ export interface InsumoRequest {
   unidade: UnidadeMedida;
   custoUnitario: number;
   itensPorSaco: number | null;
+  fornadasPorBotijao: number | null;
 }
 
 export interface InsumoPatch {
@@ -20,6 +22,7 @@ export interface InsumoPatch {
   unidade?: UnidadeMedida;
   custoUnitario?: number;
   itensPorSaco?: number | null;
+  fornadasPorBotijao?: number | null;
 }
 
 export const UNIDADES: { valor: UnidadeMedida; rotulo: string; sigla: string }[] = [
@@ -27,8 +30,16 @@ export const UNIDADES: { valor: UnidadeMedida; rotulo: string; sigla: string }[]
   { valor: 'L', rotulo: 'Litro (L)', sigla: 'L' },
   { valor: 'UN', rotulo: 'Unidade (un)', sigla: 'un' },
   { valor: 'SACO', rotulo: 'Saco de fornecedor', sigla: 'saco' },
+  { valor: 'GAS', rotulo: 'Gás (botijão)', sigla: 'fornada' },
 ];
 
 export function siglaDaUnidade(unidade: UnidadeMedida): string {
   return UNIDADES.find(u => u.valor === unidade)?.sigla ?? unidade;
+}
+
+export function custoPorUso(insumo: Insumo): number {
+  if (insumo.unidade === 'GAS' && insumo.fornadasPorBotijao) {
+    return insumo.custoUnitario / insumo.fornadasPorBotijao;
+  }
+  return insumo.custoUnitario;
 }

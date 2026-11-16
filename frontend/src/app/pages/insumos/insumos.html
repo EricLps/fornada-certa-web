@@ -42,9 +42,14 @@
             <div class="item-info">
               <span class="item-nome">{{ i.nome }}</span>
               <span class="item-detalhe">
-                {{ i.custoUnitario | currency:'BRL' }} por {{ sigla(i.unidade) }}
-                @if (i.itensPorSaco) {
-                  · {{ i.itensPorSaco }} itens por saco
+                @if (i.unidade === 'GAS') {
+                  {{ i.custoUnitario | currency:'BRL' }} o botijão · {{ i.fornadasPorBotijao }} fornadas
+                  ({{ custoPorUso(i) | currency:'BRL' }} por fornada)
+                } @else {
+                  {{ i.custoUnitario | currency:'BRL' }} por {{ sigla(i.unidade) }}
+                  @if (i.itensPorSaco) {
+                    · {{ i.itensPorSaco }} itens por saco
+                  }
                 }
               </span>
             </div>
@@ -128,6 +133,30 @@
             É a quantidade normal do saco e serve para calcular o custo do produto. Se um saco vier com menos,
             informe na fornada os sacos usados e os pães que realmente saíram: o custo daquele dia usa o número real.
           </p>
+        }
+
+        @if (form.controls.unidade.value === 'GAS') {
+          <div class="linha">
+            <div class="campo">
+              <label for="fornadas-por-botijao">Fornadas que um botijão rende</label>
+              <input id="fornadas-por-botijao" type="number" step="1" min="1" formControlName="fornadasPorBotijao"
+                     placeholder="Ex.: 20" [class.invalido]="erroDoCampo('fornadasPorBotijao')">
+              @if (erroDoCampo('fornadasPorBotijao'); as msg) {
+                <span class="erro-campo">{{ msg }}</span>
+              }
+            </div>
+            <div class="campo">
+              <span class="rotulo">Custo por fornada</span>
+              <span class="valor-calculado">
+                @if (form.controls.custoUnitario.value && form.controls.fornadasPorBotijao.value) {
+                  {{ form.controls.custoUnitario.value / form.controls.fornadasPorBotijao.value | currency:'BRL' }}
+                } @else {
+                  —
+                }
+              </span>
+            </div>
+          </div>
+          <p class="dica">Na ficha técnica de cada produto, adicione o gás com quantas fornadas a receita (ou o saco) usa. Ex.: meia fornada = 0,5.</p>
         }
 
         <div class="acoes">

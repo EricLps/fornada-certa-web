@@ -104,3 +104,17 @@ form {
   justify-content: flex-end;
   gap: 12px;
 }
+
+.rotulo {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--texto-secundario);
+}
+
+.valor-calculado {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-size: 16px;
+  font-weight: 600;
+}
