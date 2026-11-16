@@ -45,7 +45,7 @@ class InsumoControllerTest {
     private InsumoService insumoService;
 
     private static InsumoResponse leite(UUID id) {
-        return new InsumoResponse(id, "Leite", UnidadeMedida.L, new BigDecimal("5.89"), null);
+        return new InsumoResponse(id, "Leite", UnidadeMedida.L, new BigDecimal("5.89"), null, null);
     }
 
     // =====================================================================

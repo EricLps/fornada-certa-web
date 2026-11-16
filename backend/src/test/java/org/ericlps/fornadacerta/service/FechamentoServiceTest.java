@@ -171,6 +171,29 @@ class FechamentoServiceTest {
         }
 
         @Test
+        @DisplayName("fornecedor com gás na ficha: cada saco usado conta o saco e o gás da ficha")
+        void custoRealComGas() {
+            Produto pao = paoDeFornecedor();
+            Insumo gas = new Insumo();
+            gas.setId(UUID.randomUUID());
+            gas.setNome("Gás");
+            gas.setUnidade(UnidadeMedida.GAS);
+            gas.setCustoUnitario(new BigDecimal("120.00"));
+            gas.setFornadasPorBotijao(20);
+            pao.getReceita().add(new ItemReceita(pao, gas, BigDecimal.ONE));
+            LocalDate data = hoje();
+            prepararProduto(pao, data, 140);
+            when(fornadaRepository.findByProdutoIdAndData(pao.getId(), data)).thenReturn(List.of(fornada(140, 2)));
+            saveAllDevolveComIds();
+
+            fechamentoService.registrarLote(lote(data, new FechamentoItemRequest(pao.getId(), 10, null, null, null)));
+
+            verify(fechamentoRepository).saveAll(loteCaptor.capture());
+            // 2 × (28,00 do saco + 6,00 de gás) = 68,00 ÷ 140 = 0,4857 → 0,49
+            assertThat(loteCaptor.getValue().get(0).getCustoUnitario()).isEqualByComparingTo("0.49");
+        }
+
+        @Test
         @DisplayName("fornecedor com um turno sem sacos informados: esse turno entra pelo custo do cadastro")
         void custoMisturado() {
             Produto pao = paoDeFornecedor();

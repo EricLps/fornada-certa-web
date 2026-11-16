@@ -162,6 +162,21 @@ class ProdutoMapperTest {
     }
 
     @Test
+    @DisplayName("toDetalhe com gás: mostra o custo por fornada, não o preço do botijão")
+    void toDetalheComGas() {
+        Produto pao = produto(UUID.randomUUID(), "Pão caseiro", "8.00", "1.10", true);
+        Insumo gas = insumo("Gás", UnidadeMedida.GAS, "120.00");
+        gas.setFornadasPorBotijao(20);
+        pao.getReceita().add(new ItemReceita(pao, gas, new BigDecimal("0.5")));
+
+        ItemReceitaResponse item = mapper.toDetalhe(pao).itens().getFirst();
+
+        assertThat(item.unidade()).isEqualTo(UnidadeMedida.GAS);
+        assertThat(item.custoUnitario()).isEqualByComparingTo("6.00");
+        assertThat(item.custoParcial()).isEqualByComparingTo("3.00");
+    }
+
+    @Test
     @DisplayName("toDetalhe de produto sem ficha técnica: lista de itens vazia")
     void toDetalheSemItens() {
         assertThat(mapper.toDetalhe(produto(UUID.randomUUID(), "Sonho", "6.50", "3.25", true)).itens()).isEmpty();

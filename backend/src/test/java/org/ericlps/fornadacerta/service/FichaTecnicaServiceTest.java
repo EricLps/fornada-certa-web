@@ -40,6 +40,7 @@ class FichaTecnicaServiceTest {
     private Insumo ovo;
     private Insumo leite;
     private Insumo sacoMassa;
+    private Insumo gas;
 
     @BeforeEach
     void setUp() {
@@ -50,6 +51,8 @@ class FichaTecnicaServiceTest {
         leite = insumo("Leite", UnidadeMedida.L, "6.00");
         sacoMassa = insumo("Saco de massa de pão francês", UnidadeMedida.SACO, "48.00");
         sacoMassa.setItensPorSaco(80);
+        gas = insumo("Gás (botijão P13)", UnidadeMedida.GAS, "120.00");
+        gas.setFornadasPorBotijao(20); // R$ 6,00 por fornada
     }
 
     private Insumo insumo(String nome, UnidadeMedida unidade, String custo) {
@@ -137,6 +140,33 @@ class FichaTecnicaServiceTest {
             assertThat(bolo.getFatias()).isEqualTo(12);
             assertThat(bolo.getRendimento()).isEqualTo(1);
             assertThat(bolo.getCusto()).isEqualByComparingTo("0.55");
+        }
+
+        @Test
+        @DisplayName("gás na receita: entra pelo custo por fornada (preço do botijão ÷ fornadas que ele rende)")
+        void gasNaReceita() {
+            Produto produto = produtoNovo();
+            insumosExistem(farinha, gas);
+
+            // 1 kg de farinha (5,00) + 1 fornada de gás (120,00 ÷ 20 = 6,00) = 11,00 ÷ 10 itens
+            fichaTecnicaService.aplicar(produto, OrigemProduto.PRODUCAO_PROPRIA, 10, null,
+                    List.of(item(farinha, "1"), item(gas, "1")));
+
+            assertThat(produto.getCusto()).isEqualByComparingTo("1.10");
+        }
+
+        @Test
+        @DisplayName("fornecedor com saco e gás: o gás soma no custo do saco antes de dividir pelos itens")
+        void fornecedorComGas() {
+            Produto pao = produtoNovo();
+            insumosExistem(sacoMassa, gas);
+
+            // (48,00 do saco + meia fornada de gás 3,00) ÷ 80 pães = 0,6375 → 0,64
+            fichaTecnicaService.aplicar(pao, OrigemProduto.FORNECEDOR, null, null,
+                    List.of(item(sacoMassa, "1"), item(gas, "0.5")));
+
+            assertThat(pao.getRendimento()).isEqualTo(80);
+            assertThat(pao.getCusto()).isEqualByComparingTo("0.64");
         }
 
         @Test
@@ -252,6 +282,17 @@ class FichaTecnicaServiceTest {
                     .hasMessageContaining("rende");
 
             assertThat(produto.getReceita()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("fornecedor só com gás, sem saco: 422")
+        void fornecedorSoComGas() {
+            insumosExistem(gas);
+
+            assertThatThrownBy(() -> fichaTecnicaService.aplicar(produtoNovo(), OrigemProduto.FORNECEDOR, null, null,
+                    List.of(item(gas, "1"))))
+                    .isInstanceOf(RegraDeNegocioException.class)
+                    .hasMessageContaining("SACO");
         }
 
         @Test
