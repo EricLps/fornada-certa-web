@@ -30,6 +30,7 @@ O Fornada Certa ajuda uma padaria a produzir a quantidade certa de cada produto.
 
 - **Produtos e ficha técnica:** cadastro dos produtos com preço de venda e receita (insumos e quantidades), de onde sai o custo de cada item.
 - **Insumos:** cadastro dos ingredientes (farinha, leite, ovos…) e dos sacos de massa comprados de fornecedores, com o custo por unidade e, nos sacos, quantos itens vêm em cada um.
+- **Gás:** o botijão é cadastrado como insumo, com o preço e quantas fornadas ele rende; o custo por fornada entra na ficha técnica.
 - **Venda em fatias:** bolos, pudins e tortas podem ser vendidos por fatia, com preço e custo por fatia.
 - **Fornada do dia:** registro de quanto foi produzido de cada produto, por turno.
 - **Fechamento do dia:** registro das sobras; o sistema calcula o vendido, o descartado e o custo do desperdício.
@@ -95,6 +96,7 @@ erDiagram
         varchar unidade
         numeric custo_unitario
         integer itens_por_saco
+        integer fornadas_por_botijao
     }
     ITEM_RECEITA {
         uuid id PK
@@ -125,7 +127,7 @@ erDiagram
 | Tabela | Guarda | Regras no banco |
 | --- | --- | --- |
 | `produto` | O que a padaria vende: nome, preço, custo, se está ativo, origem (produção própria ou fornecedor), rendimento e, se for vendido em fatias, quantas fatias tem cada unidade | Nome único; custo ≥ 0; rendimento > 0; fatias ≥ 2 |
-| `insumo` | Ingredientes e sacos de massa de fornecedor, com unidade (KG, L, UN, SACO), custo por unidade e, nos sacos, quantos itens vêm em cada um | Nome único; unidade só entre as quatro; custo ≥ 0; itens por saco só em insumo do tipo SACO |
+| `insumo` | Ingredientes, sacos de massa de fornecedor e o gás, com unidade (KG, L, UN, SACO, GAS), custo por unidade, itens por saco (nos sacos) e fornadas por botijão (no gás) | Nome único; unidade só entre as cinco; custo ≥ 0; itens por saco só em SACO; fornadas por botijão só em GAS |
 | `item_receita` | Quanto de cada insumo entra em um produto (3 casas decimais) | Quantidade > 0; o mesmo insumo só uma vez por produto |
 | `fornada` | Quanto foi produzido por produto, dia e turno (MANHA, TARDE), e quantos pacotes foram usados | Uma fornada por produto, dia e turno; quantidade > 0 |
 | `fechamento` | O que sobrou por produto e dia, quanto foi doado ou reaproveitado, o custo do dia e a hora em que esgotou | Um fechamento por produto e dia; doado + reaproveitado ≤ sobra; horário de esgotar só com sobra zero |
@@ -138,6 +140,7 @@ erDiagram
 - **Fornada por turno.** A padaria assa de manhã e à tarde. Separar os turnos permite lançar cada um na hora em que acontece; o total do dia é a soma dos dois.
 - **`pacotes_usados` opcional.** Para produtos de fornecedor (ex.: pão francês de saco) é útil anotar quantos sacos foram abertos; nos outros o campo fica vazio.
 - **Itens por saco no cadastro do saco, e não no produto.** É uma característica do saco que o fornecedor entrega. Se o fornecedor mudar a quantidade, basta editar o saco e todos os produtos que o usam têm o custo recalculado.
+- **Gás como insumo, e não como custo à parte.** O botijão é um insumo do tipo GAS: guarda o preço e quantas fornadas rende, e o custo por fornada (preço ÷ fornadas) entra na ficha técnica como qualquer ingrediente. Assim o gás aparece no custo de cada item sem uma tabela nova, e mudar o preço do botijão recalcula os produtos como acontece com a farinha.
 - **Fatias no produto, quantidades em fatias.** Para um bolo vendido em fatias, a fornada, o fechamento e a sugestão contam fatias, porque é nessa unidade que se vende e que sobra. Só a tela da fornada pede unidades inteiras e converte (3 bolos × 12 = 36 fatias).
 - **Fechamento com `custo_unitario` copiado.** O custo do produto muda quando um insumo encarece. Se o fechamento só apontasse para o produto, o desperdício de meses atrás seria recalculado com o preço de hoje. Copiando o custo no momento do fechamento, o relatório de um dia passado nunca muda.
 - **Sobra dividida em doada, reaproveitada e descartada.** Só o descartado é perda real. O que foi doado ou virou outro produto (pão velho em farinha de rosca, por exemplo) não entra no custo do desperdício.
@@ -157,6 +160,7 @@ A estrutura é criada só pelo Flyway, e o Hibernate roda com `ddl-auto: validat
 | `V3__criar_tabelas_fornada_e_fechamento.sql` | Cria `fornada` e `fechamento` com todas as constraints |
 | `V5__criar_ficha_tecnica.sql` | Cria `insumo` e `item_receita` e adiciona `origem` e `rendimento` ao produto |
 | `V6__adicionar_itens_por_saco_e_fatias.sql` | Adiciona `itens_por_saco` ao insumo (preenchido a partir dos produtos de fornecedor que já existiam) e `fatias` ao produto |
+| `V7__adicionar_gas.sql` | Aceita a unidade GAS e adiciona `fornadas_por_botijao` ao insumo |
 
 Uma migration aplicada nunca é editada: o Flyway guarda um checksum de cada arquivo e recusa subir se ele mudar. Correções entram sempre como um arquivo novo. As migrations de dados de exemplo (a V4 e a primeira V6) foram removidas antes de chegarem ao banco de produção para o banco começar vazio e receber dados reais; o salto na numeração não atrapalha o Flyway.
 
@@ -254,7 +258,7 @@ Exemplo: 300 pães produzidos, 40 de sobra, 10 doados e 5 reaproveitados. Vendid
 **Custo real do saco.** Às vezes um saco do fornecedor vem com menos pães que o normal. Por isso, na fornada de um produto de fornecedor, informa-se quantos sacos foram usados e quantos pães realmente saíram. No fechamento, o custo do dia é calculado assim:
 
 ```
-custo do dia = Σ (sacos usados × preço do saco) ÷ pães produzidos no dia
+custo do dia = Σ (sacos usados × custo da ficha por saco) ÷ pães produzidos no dia
 ```
 
 Exemplo: 2 sacos de R$ 28,00 deveriam dar 160 pães, mas saíram 140. O custo do dia é R$ 56,00 ÷ 140 = R$ 0,40 por pão, e não os R$ 0,35 do cadastro; o desperdício daquele dia é calculado com R$ 0,40. Um turno lançado sem a quantidade de sacos entra pelo custo do cadastro.
@@ -304,6 +308,7 @@ Quando o produto não é vendido em fatias, fatias vale 1.
 
 - **Produção própria:** a receita lista os insumos e quanto de cada um. Ex.: 1 kg de polvilho (R$ 9,00) + 0,5 kg de queijo (R$ 24,00) + 0,5 L de leite (R$ 3,00) + 4 ovos (R$ 3,20) + 0,2 L de óleo (R$ 1,80) = R$ 41,00; rendendo 30 pães de queijo, dá R$ 1,37 cada.
 - **Fornecedor:** a padaria compra a massa pronta em sacos. A ficha tem exatamente um insumo do tipo SACO, e o rendimento é a quantidade de itens cadastrada no saco. Ex.: saco de R$ 28,00 que vem com 80 pães = R$ 0,35 por pão.
+- **Gás:** na receita, a quantidade de gás é em fornadas. Ex.: botijão de R$ 120,00 que rende 20 fornadas = R$ 6,00 por fornada; uma receita que usa meia fornada soma R$ 3,00. Em produto de fornecedor, a ficha pode ter o saco e, além dele, o gás que cada saco gasta no forno.
 - **Vendido em fatias:** o rendimento é em unidades inteiras e o produto informa quantas fatias tem cada unidade. O custo e o preço passam a ser por fatia. Ex.: receita de R$ 6,60 que rende 1 bolo de 12 fatias = R$ 0,55 por fatia.
 - **A quantidade usa a unidade do insumo.** Farinha comprada por kg entra na receita em kg (0,250 = 250 g). Isso dispensa uma tabela de conversão de unidades e os erros que ela traria.
 - **O resultado é arredondado para centavos** (meio para cima), porque é o valor gravado no produto e usado nos fechamentos.
@@ -326,9 +331,9 @@ A API roda em `http://localhost:8080`, recebe e devolve JSON, e todo erro sai no
 | `GET /produto` | Lista produtos | `status` (true/false, opcional), `ordem` (ASC/DESC) | 200 |
 | `GET /produto/{id}` | Detalha o produto com os itens da ficha e o custo de cada um | — | 200 |
 | `PATCH /produto/{id}` | Altera nome, preço, status ou a ficha (origem + itens, rendimento na produção própria, fatias opcional) | corpo parcial | 200 |
-| `POST /insumo` | Cadastra insumo | corpo: nome, unidade, custoUnitario, itensPorSaco (obrigatório em SACO) | 201 |
+| `POST /insumo` | Cadastra insumo | corpo: nome, unidade, custoUnitario, itensPorSaco (obrigatório em SACO), fornadasPorBotijao (obrigatório em GAS) | 201 |
 | `GET /insumo` | Lista insumos por nome | `ordem` | 200 |
-| `PATCH /insumo/{id}` | Altera o insumo e, se mudar o custo ou os itens por saco, recalcula o custo dos produtos que o usam | corpo parcial | 200 |
+| `PATCH /insumo/{id}` | Altera o insumo e, se mudar o custo, os itens por saco ou as fornadas por botijão, recalcula o custo dos produtos que o usam | corpo parcial | 200 |
 | `POST /fornada` | Lança a produção de um turno (lote) | corpo: data, turno, itens | 201 |
 | `GET /fornada` | Fornadas de um dia | `data` (padrão hoje), `turno` | 200 |
 | `PATCH /fornada/{id}` | Corrige quantidade ou pacotes | corpo parcial | 200 |
@@ -433,7 +438,7 @@ O front é uma aplicação Angular de uma página só, com um menu lateral e cin
 | Fornada do dia | `/fornada` | Escolhe data e turno e lança a quantidade de cada produto ativo. Bolos em fatias são lançados em unidades inteiras; produtos de fornecedor pedem os sacos usados, sugerem os pães esperados e avisam quando vieram menos |
 | Fechamento do dia | `/fechamento` | Lista os produtos que tiveram fornada no dia e recebe sobra, doado, reaproveitado e horário em que esgotou, com resumo do custo da perda |
 | Produtos | `/produtos` | Lista, filtro por ativos e inativos, busca, ativar/desativar e formulário com a ficha técnica |
-| Insumos | `/insumos` | Cadastro e edição de ingredientes e sacos de fornecedor, com filtro por tipo |
+| Insumos | `/insumos` | Cadastro e edição de ingredientes, sacos de fornecedor e gás, com filtro por tipo |
 
 ### Organização
 
@@ -463,7 +468,7 @@ frontend/src/app/
 
 ## 8. Testes e qualidade
 
-O backend tem 269 testes automatizados, que cobrem os casos de sucesso e também os de erro (dados inválidos, duplicados, regras violadas).
+O backend tem 277 testes automatizados, que cobrem os casos de sucesso e também os de erro (dados inválidos, duplicados, regras violadas).
 
 | Tipo | O que testa | Como | Classes |
 | --- | --- | --- | --- |
