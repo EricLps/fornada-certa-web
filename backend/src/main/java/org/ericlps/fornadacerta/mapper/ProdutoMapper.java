@@ -29,7 +29,8 @@ public class ProdutoMapper {
                 produto.getCusto(),
                 produto.getStatus(),
                 produto.getOrigem(),
-                produto.getRendimento()
+                produto.getRendimento(),
+                produto.getFatias()
         );
     }
 
@@ -53,6 +54,7 @@ public class ProdutoMapper {
                 produto.getStatus(),
                 produto.getOrigem(),
                 produto.getRendimento(),
+                produto.getFatias(),
                 itens
         );
     }

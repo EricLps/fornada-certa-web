@@ -33,4 +33,6 @@ public interface FornadaRepository extends JpaRepository<Fornada, UUID> {
     long somarProducaoDoDia(@Param("produtoId") UUID produtoId, @Param("data") LocalDate data);
 
     List<Fornada> findByDataBetween(LocalDate inicio, LocalDate fim);
+
+    List<Fornada> findByProdutoIdAndData(UUID produtoId, LocalDate data);
 }

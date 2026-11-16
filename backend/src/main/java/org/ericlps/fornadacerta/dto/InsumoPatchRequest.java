@@ -9,6 +9,7 @@ import java.math.BigDecimal;
 public record InsumoPatchRequest(
         @Size(min = 1, max = 100) String nome,
         UnidadeMedida unidade,
-        @Positive BigDecimal custoUnitario
+        @Positive BigDecimal custoUnitario,
+        @Positive Integer itensPorSaco
 ) {
 }

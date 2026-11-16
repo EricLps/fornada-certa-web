@@ -13,5 +13,6 @@ public record ProdutoDetalheResponse(UUID id,
                                      boolean ativo,
                                      OrigemProduto origem,
                                      Integer rendimento,
+                                     Integer fatias,
                                      List<ItemReceitaResponse> itens) {
 }

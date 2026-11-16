@@ -39,6 +39,8 @@ public class Produto {
 
     private Integer rendimento;
 
+    private Integer fatias;
+
     @OneToMany(mappedBy = "produto", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ItemReceita> receita = new ArrayList<>();
 

@@ -62,7 +62,8 @@ public class SugestaoService {
                     resultado.amostras(),
                     resultado.mediaVendida(),
                     resultado.qtdSugerida(),
-                    resultado.aviso()));
+                    resultado.aviso(),
+                    produto.getFatias()));
         }
         return sugestoes;
     }

@@ -5,7 +5,9 @@ import org.ericlps.fornadacerta.dto.FechamentoItemRequest;
 import org.ericlps.fornadacerta.dto.FechamentoLoteRequest;
 import org.ericlps.fornadacerta.dto.FechamentoResponse;
 import org.ericlps.fornadacerta.entity.Fechamento;
+import org.ericlps.fornadacerta.entity.Fornada;
 import org.ericlps.fornadacerta.entity.Produto;
+import org.ericlps.fornadacerta.entity.enums.OrigemProduto;
 import org.ericlps.fornadacerta.exception.ConflitoException;
 import org.ericlps.fornadacerta.exception.RecursoNaoEncontradoException;
 import org.ericlps.fornadacerta.exception.RegraDeNegocioException;
@@ -17,6 +19,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -77,7 +81,7 @@ public class FechamentoService {
                         + ") não pode passar do total produzido no dia (" + produzido + ").");
             }
 
-            fechamentos.add(fechamentoMapper.toEntity(item, produto, data));
+            fechamentos.add(fechamentoMapper.toEntity(item, produto, data, custoDoDia(produto, data, produzido)));
         }
 
         return fechamentoMapper.toResponseList(fechamentoRepository.saveAll(fechamentos));
@@ -89,6 +93,25 @@ public class FechamentoService {
         LocalDate dia = (data != null) ? data : LocalDate.now(FUSO);
 
         return fechamentoMapper.toResponseList(fechamentoRepository.findByData(dia, POR_NOME_DO_PRODUTO));
+    }
+
+    private BigDecimal custoDoDia(Produto produto, LocalDate data, long produzido) {
+
+        if (produto.getOrigem() != OrigemProduto.FORNECEDOR || produto.getReceita().isEmpty()) {
+            return produto.getCusto();
+        }
+
+        BigDecimal custoDoSaco = produto.getReceita().getFirst().getInsumo().getCustoUnitario();
+        BigDecimal total = BigDecimal.ZERO;
+
+        for (Fornada fornada : fornadaRepository.findByProdutoIdAndData(produto.getId(), data)) {
+            BigDecimal custoDaFornada = (fornada.getPacotesUsados() != null)
+                    ? custoDoSaco.multiply(BigDecimal.valueOf(fornada.getPacotesUsados()))
+                    : produto.getCusto().multiply(BigDecimal.valueOf(fornada.getQtdProduzida()));
+            total = total.add(custoDaFornada);
+        }
+
+        return total.divide(BigDecimal.valueOf(produzido), 2, RoundingMode.HALF_UP);
     }
 
     private void validarItem(FechamentoItemRequest item, Produto produto) {

@@ -9,6 +9,7 @@ public record InsumoResponse(
         UUID id,
         String nome,
         UnidadeMedida unidade,
-        BigDecimal custoUnitario
+        BigDecimal custoUnitario,
+        Integer itensPorSaco
 ) {
 }

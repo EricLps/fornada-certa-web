@@ -1,6 +1,7 @@
 package org.ericlps.fornadacerta.dto;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import org.ericlps.fornadacerta.entity.enums.OrigemProduto;
@@ -14,14 +15,15 @@ public record ProdutoPatchRequest(
         Boolean status,
         OrigemProduto origem,
         @Positive Integer rendimento,
-        @Size(min = 1) @Valid List<ItemReceitaRequest> itens
+        @Size(min = 1) @Valid List<ItemReceitaRequest> itens,
+        @Min(2) Integer fatias
         ) {
 
     public boolean alteraFichaTecnica() {
-        return origem != null || rendimento != null || itens != null;
+        return origem != null || rendimento != null || itens != null || fatias != null;
     }
 
     public boolean fichaTecnicaCompleta() {
-        return origem != null && rendimento != null && itens != null;
+        return origem != null && itens != null && (origem == OrigemProduto.FORNECEDOR || rendimento != null);
     }
 }

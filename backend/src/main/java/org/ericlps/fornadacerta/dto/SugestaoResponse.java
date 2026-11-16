@@ -15,6 +15,7 @@ public record SugestaoResponse(
         Integer amostras,
         BigDecimal mediaVendida,
         Integer qtdSugerida,
-        String aviso
+        String aviso,
+        Integer fatias
 ) {
 }

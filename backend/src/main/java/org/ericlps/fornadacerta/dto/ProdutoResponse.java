@@ -11,5 +11,6 @@ public record ProdutoResponse(UUID id,
                               BigDecimal custo,
                               boolean ativo,
                               OrigemProduto origem,
-                              Integer rendimento) {
+                              Integer rendimento,
+                              Integer fatias) {
 }

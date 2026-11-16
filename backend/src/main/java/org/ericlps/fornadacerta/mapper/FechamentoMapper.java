@@ -13,14 +13,14 @@ import java.util.List;
 @Component
 public class FechamentoMapper {
 
-    public Fechamento toEntity(FechamentoItemRequest item, Produto produto, LocalDate data) {
+    public Fechamento toEntity(FechamentoItemRequest item, Produto produto, LocalDate data, BigDecimal custoUnitario) {
         Fechamento fechamento = new Fechamento();
         fechamento.setProduto(produto);
         fechamento.setData(data);
         fechamento.setQtdSobra(item.qtdSobra());
         fechamento.setQtdDoada(item.doadaOuZero());
         fechamento.setQtdReaproveitada(item.reaproveitadaOuZero());
-        fechamento.setCustoUnitario(produto.getCusto());
+        fechamento.setCustoUnitario(custoUnitario);
         fechamento.setHorarioEsgotou(item.horarioEsgotou());
         return fechamento;
     }

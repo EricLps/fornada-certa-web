@@ -5,6 +5,7 @@ import org.ericlps.fornadacerta.dto.InsumoPatchRequest;
 import org.ericlps.fornadacerta.dto.InsumoRequest;
 import org.ericlps.fornadacerta.dto.InsumoResponse;
 import org.ericlps.fornadacerta.entity.Insumo;
+import org.ericlps.fornadacerta.entity.enums.UnidadeMedida;
 import org.ericlps.fornadacerta.exception.ConflitoException;
 import org.ericlps.fornadacerta.exception.RecursoNaoEncontradoException;
 import org.ericlps.fornadacerta.exception.RegraDeNegocioException;
@@ -29,11 +30,17 @@ public class InsumoService {
     private final FichaTecnicaService fichaTecnicaService;
     private final InsumoMapper insumoMapper;
 
+    private static final String SEM_ITENS_POR_SACO = "Informe quantos itens vêm em cada saco.";
+
     @Transactional
     public InsumoResponse cadastrar(InsumoRequest request) {
 
         if (insumoRepository.existsByNomeIgnoreCase(request.nome())) {
             throw new ConflitoException("Já existe um insumo cadastrado como: " + request.nome());
+        }
+
+        if (request.unidade() == UnidadeMedida.SACO && request.itensPorSaco() == null) {
+            throw new RegraDeNegocioException(SEM_ITENS_POR_SACO);
         }
 
         return insumoMapper.toResponse(insumoRepository.save(insumoMapper.toEntity(request)));
@@ -66,8 +73,25 @@ public class InsumoService {
             insumo.setUnidade(request.unidade());
         }
 
+        boolean recalcular = false;
+
+        if (request.itensPorSaco() != null && !request.itensPorSaco().equals(insumo.getItensPorSaco())) {
+            insumo.setItensPorSaco(request.itensPorSaco());
+            recalcular = true;
+        }
+
+        if (insumo.getUnidade() != UnidadeMedida.SACO) {
+            insumo.setItensPorSaco(null);
+        } else if (insumo.getItensPorSaco() == null) {
+            throw new RegraDeNegocioException(SEM_ITENS_POR_SACO);
+        }
+
         if (request.custoUnitario() != null && request.custoUnitario().compareTo(insumo.getCustoUnitario()) != 0) {
             insumo.setCustoUnitario(request.custoUnitario());
+            recalcular = true;
+        }
+
+        if (recalcular) {
             produtoRepository.findUsandoInsumo(id).forEach(fichaTecnicaService::recalcularCusto);
         }
 

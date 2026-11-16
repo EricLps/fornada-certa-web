@@ -34,7 +34,7 @@ public class ProdutoService {
         }
 
         Produto produto = produtoMapper.toEntity(request);
-        fichaTecnicaService.aplicar(produto, request.origem(), request.rendimento(), request.itens());
+        fichaTecnicaService.aplicar(produto, request.origem(), request.rendimento(), request.fatias(), request.itens());
 
         return produtoMapper.toResponse(produtoRepository.save(produto));
     }
@@ -77,7 +77,7 @@ public class ProdutoService {
                 throw new RegraDeNegocioException("Para alterar a ficha técnica, envie origem, rendimento e itens juntos.");
             }
 
-            fichaTecnicaService.aplicar(produto, request.origem(), request.rendimento(), request.itens());
+            fichaTecnicaService.aplicar(produto, request.origem(), request.rendimento(), request.fatias(), request.itens());
 
         }
 
